@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net5.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DSharpPlus" Version="4.0.1" />
+    <PackageReference Include="DSharpPlus.CommandsNext" Version="4.0.1" />
+    <PackageReference Include="DSharpPlus.Interactivity" Version="4.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Handlers\" />
+    <Folder Include="Processors\" />
+    <Folder Include="Entities\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="LloydLion.Serialization.Common">
+      <HintPath>..\..\Serialization\SerializationJson\bin\Debug\netcoreapp3.1\LloydLion.Serialization.Common.dll</HintPath>
+    </Reference>
+    <Reference Include="LloydLion.Serialization.Json">
+      <HintPath>..\..\Serialization\SerializationJson\bin\Debug\netcoreapp3.1\LloydLion.Serialization.Json.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>
