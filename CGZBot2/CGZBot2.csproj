@@ -12,18 +12,16 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Handlers\" />
-    <Folder Include="Processors\" />
-    <Folder Include="Entities\" />
-  </ItemGroup>
-
-  <ItemGroup>
     <Reference Include="LloydLion.Serialization.Common">
       <HintPath>..\..\Serialization\SerializationJson\bin\Debug\netcoreapp3.1\LloydLion.Serialization.Common.dll</HintPath>
     </Reference>
     <Reference Include="LloydLion.Serialization.Json">
       <HintPath>..\..\Serialization\SerializationJson\bin\Debug\netcoreapp3.1\LloydLion.Serialization.Json.dll</HintPath>
     </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Processors\Entities\" />
   </ItemGroup>
 
 </Project>

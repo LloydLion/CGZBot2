@@ -1,4 +1,7 @@
-﻿using DSharpPlus;
+﻿using CGZBot2.Handlers;
+using CGZBot2.Processors;
+using CGZBot2.Processors.Discord;
+using DSharpPlus;
 using DSharpPlus.CommandsNext;
 using DSharpPlus.Interactivity;
 using DSharpPlus.Interactivity.Extensions;
@@ -7,6 +10,7 @@ using LloydLion.Serialization.Json;
 using Microsoft.Extensions.Logging;
 using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -23,6 +27,9 @@ namespace CGZBot2
 			var json = new JsonSerializator();
 			SerializatorProvider.AddSerializator(json);
 			SerializatorProvider.AddDeserializator(json);
+
+			SerializatorProvider.AddProcessor(new GuildSettingsProcessor());
+			SerializatorProvider.AddProcessor(new DiscordChannelProcessor());
 
 			SerializatorProvider.SetDefaultFormat("json");
 
@@ -44,10 +51,12 @@ namespace CGZBot2
 				
 			});
 
-			Client.GetCommandsNext().RegisterCommands(Assembly.GetExecutingAssembly());
-			Client.GetCommandsNext().CommandErrored += (sender, args) => 
+			var types = Assembly.GetExecutingAssembly().DefinedTypes.Where(s => typeof(BaseCommandModule).IsAssignableFrom(s));
+			foreach (var type in types)	Client.GetCommandsNext().RegisterCommands(type);
+
+			Client.GetCommandsNext().CommandErrored += (sender, args) =>
 			{
-				Client.Logger.Log(LogLevel.Error, args.Exception, "Exception in command {0}", args.Command.Name);
+				Client.Logger.Log(LogLevel.Error, args.Exception, "Exception in command /{0}", args.Command?.Name ?? "--");
 				args.Handled = true;
 				return Task.CompletedTask;
 			};
