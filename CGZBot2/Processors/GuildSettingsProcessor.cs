@@ -16,7 +16,7 @@ namespace CGZBot2.Processors
 
 		public bool CanProcess(Type type)
 		{
-			return type.FullName.StartsWith("CGZBot2.GuildSettings`");
+			return type.FullName.StartsWith("CGZBot2.GuildDictionary`");
 		}
 
 		public void Prepare(object origin, ObjectsDataSetBuilder builder, ISerializator invoker, string rootId = "")
@@ -42,7 +42,7 @@ namespace CGZBot2.Processors
 
 		public object Restore(object baseFeature, ObjectsDataSet obj, IDeserializator invoker, string rootId = "")
 		{
-			var dic = (IDictionary)baseFeature;
+			var dic = (IDictionary)(baseFeature ?? new Dictionary<DiscordGuild, object>());
 			var root = obj.GetEntry(rootId).Data;
 			var count = (int)root.ReadPrimitive("count");
 

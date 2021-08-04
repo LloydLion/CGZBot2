@@ -13,16 +13,20 @@ namespace CGZBot2.Handlers
 {
 	class VoiceHandler : BaseCommandModule
 	{
-		private static readonly GuildSettings<DiscordChannel> voiceCreationCategory;
+		private static readonly GuildDictionary<DiscordChannel> voiceCreationCategory;
+		private static readonly GuildDictionary<DiscordChannel> voiceCreationReportChannel;
 
 
-		private readonly List<CreatedVoiceChannel> createdVoices = new();
+		private readonly GuildDictionary<List<CreatedVoiceChannel>> createdVoices =
+			HandlerState.Get(typeof(VoiceHandler), nameof(createdVoices), () => new List<CreatedVoiceChannel>());
 
 
 		static VoiceHandler()
 		{
 			voiceCreationCategory =
-				BotSettings.Load<DiscordChannel>(typeof(VoiceHandler), "test");
+				BotSettings.Load<DiscordChannel>(typeof(VoiceHandler), nameof(voiceCreationCategory));
+			voiceCreationReportChannel =
+				BotSettings.Load<DiscordChannel>(typeof(VoiceHandler), nameof(voiceCreationReportChannel));
 		}
 
 
@@ -34,11 +38,54 @@ namespace CGZBot2.Handlers
 			[Description("Имя создаваемого канала")] string name)
 		{
 			DiscordChannel category = voiceCreationCategory[ctx];
-			var channel = new CreatedVoiceChannel(await ctx.Guild.CreateChannelAsync(name, ChannelType.Voice, category));
 
-			createdVoices.Add(channel);
+			var count = createdVoices[ctx].Where(s => s.Creator == ctx.Member).Count();
+			if(count >= 2)
+			{
+				var msg = await ctx.RespondAsync("Вы превысили лимит. Участник может создать до 2 каналов");
+				await Task.Delay(8000);
+				try { await msg.DeleteAsync(); } catch (Exception) { }
+				try { await ctx.Message.DeleteAsync(); } catch (Exception) { }
+				return;
+			}
+
+			var overs = new DiscordOverwriteBuilder[] { new DiscordOverwriteBuilder().For(ctx.Member).Allow(Permissions.All) };
+
+			var channel = new CreatedVoiceChannel(creator: ctx.Member, channel:
+				await ctx.Guild.CreateChannelAsync(name, ChannelType.Voice, category, overwrites: overs));
+
+			createdVoices[ctx].Add(channel);
+			UpdateReports(ctx.Guild);
+
 			await Task.Delay(10000);
+
+			channel.DeleteTask.GetAwaiter().OnCompleted(() =>
+				{ createdVoices[ctx].Remove(channel); UpdateReports(ctx.Guild); });
 			channel.DeleteTask.Start();
+		}
+
+		private void UpdateReports(DiscordGuild guild)
+		{
+			var channel = voiceCreationReportChannel[guild];
+
+			var nonDel = createdVoices[guild].Select(s => s.ReportMessage).ToList();
+			channel.DeleteMessagesAsync(channel.GetMessagesAsync(1000).Result.Where(s => !nonDel.Contains(s)));
+
+			foreach (var voice in createdVoices[guild])
+			{
+				if (voice.ReportMessage != null) continue;
+
+				var builder = new DiscordEmbedBuilder();
+
+				builder
+					.WithColor(DiscordColor.Azure)
+					.WithTimestamp(voice.CreationDate)
+					.WithAuthor(voice.Creator.DisplayName, iconUrl: voice.Creator.AvatarUrl)
+					.WithTitle("Создан голосовой канал")
+					.AddField("Имя", voice.Name, inline: true);
+
+				voice.ReportMessage = channel.SendMessageAsync(builder.Build()).Result;
+			}
 		}
 	}
 }
