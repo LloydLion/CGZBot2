@@ -28,7 +28,7 @@ namespace CGZBot2.Handlers
 			foreach (var d in createdVoices)
 				foreach (var ch in d.Value)
 				{
-					ch.DeleteHandler = ChannelDeleteTaskCompleted;
+					ch.Deleted += ChannelDeleted;
 					ch.DeleteTask.Start();
 				}
 		}
@@ -65,7 +65,7 @@ namespace CGZBot2.Handlers
 
 			channel.DeleteTask.GetAwaiter().OnCompleted(() =>
 			{
-				ChannelDeleteTaskCompleted(channel);
+				ChannelDeleted(channel);
 			});
 
 			channel.DeleteTask.Start();
@@ -95,7 +95,7 @@ namespace CGZBot2.Handlers
 			}
 		}
 
-		private void ChannelDeleteTaskCompleted(CreatedVoiceChannel channel)
+		private void ChannelDeleted(CreatedVoiceChannel channel)
 		{
 			createdVoices[channel.Channel.Guild].Remove(channel); UpdateReports(channel.Channel.Guild);
 			HandlerState.Set(typeof(VoiceHandler), nameof(createdVoices), createdVoices);
