@@ -21,6 +21,8 @@ namespace CGZBot2
 	{
 		public static DiscordClient Client { get; private set; }
 
+		public static bool Connected { get; private set; }
+
 
 		static void Main(string[] args)
 		{
@@ -28,8 +30,13 @@ namespace CGZBot2
 			SerializatorProvider.AddSerializator(json);
 			SerializatorProvider.AddDeserializator(json);
 
-			SerializatorProvider.AddProcessor(new GuildSettingsProcessor());
-			SerializatorProvider.AddProcessor(new DiscordChannelProcessor());
+			foreach (var type in Assembly.GetExecutingAssembly().DefinedTypes
+				.Where(s => typeof(ITypeSerializationProcessor).IsAssignableFrom(s)))
+			{
+				SerializatorProvider.AddProcessor(
+					 (ITypeSerializationProcessor)type.GetConstructor(Array.Empty<Type>())
+					 .Invoke(Array.Empty<object>()));
+			}
 
 			SerializatorProvider.SetDefaultFormat("json");
 
@@ -61,7 +68,16 @@ namespace CGZBot2
 				return Task.CompletedTask;
 			};
 
-			Client.ConnectAsync();
+			Client.GetCommandsNext().CommandExecuted += (sender, args) =>
+			{
+				HandlerState.SaveAll();
+				return Task.CompletedTask;
+			};
+
+			Client.ConnectAsync().Wait();
+
+			Thread.Sleep(10000);
+			Connected = true;
 			Thread.Sleep(-1);
 		}
 	}

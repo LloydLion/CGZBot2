@@ -12,7 +12,8 @@ namespace CGZBot2.Entities
 	{
 		public CreatedVoiceChannel(DiscordChannel channel, DiscordMember creator)
 		{
-			DeleteTask = new Task(() => { while (MemberCount > 0) Thread.Sleep(100); Channel.DeleteAsync(); });
+			DeleteTask = new Task(() => { while (!Program.Connected || MemberCount > 0) Thread.Sleep(100);
+				Channel.DeleteAsync(); DeleteHandler?.Invoke(this); });
 			Channel = channel;
 			Creator = creator;
 		}
@@ -23,6 +24,8 @@ namespace CGZBot2.Entities
 		public DiscordMember Creator { get; }
 
 		public DiscordMessage ReportMessage { get; set; }
+
+		public Action<CreatedVoiceChannel> DeleteHandler { get; set; }
 
 		public Task DeleteTask { get; }
 

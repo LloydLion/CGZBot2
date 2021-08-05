@@ -13,20 +13,24 @@ namespace CGZBot2.Handlers
 {
 	class VoiceHandler : BaseCommandModule
 	{
-		private static readonly GuildDictionary<DiscordChannel> voiceCreationCategory;
-		private static readonly GuildDictionary<DiscordChannel> voiceCreationReportChannel;
+		private static readonly GuildDictionary<DiscordChannel> voiceCreationCategory =
+			BotSettings.Load<DiscordChannel>(typeof(VoiceHandler), nameof(voiceCreationCategory));
+		private static readonly GuildDictionary<DiscordChannel> voiceCreationReportChannel =
+			BotSettings.Load<DiscordChannel>(typeof(VoiceHandler), nameof(voiceCreationReportChannel));
 
 
 		private readonly GuildDictionary<List<CreatedVoiceChannel>> createdVoices =
 			HandlerState.Get(typeof(VoiceHandler), nameof(createdVoices), () => new List<CreatedVoiceChannel>());
 
 
-		static VoiceHandler()
+		public VoiceHandler()
 		{
-			voiceCreationCategory =
-				BotSettings.Load<DiscordChannel>(typeof(VoiceHandler), nameof(voiceCreationCategory));
-			voiceCreationReportChannel =
-				BotSettings.Load<DiscordChannel>(typeof(VoiceHandler), nameof(voiceCreationReportChannel));
+			foreach (var d in createdVoices)
+				foreach (var ch in d.Value)
+				{
+					ch.DeleteHandler = ChannelDeleteTaskCompleted;
+					ch.DeleteTask.Start();
+				}
 		}
 
 
@@ -60,7 +64,10 @@ namespace CGZBot2.Handlers
 			await Task.Delay(10000);
 
 			channel.DeleteTask.GetAwaiter().OnCompleted(() =>
-				{ createdVoices[ctx].Remove(channel); UpdateReports(ctx.Guild); });
+			{
+				ChannelDeleteTaskCompleted(channel);
+			});
+
 			channel.DeleteTask.Start();
 		}
 
@@ -86,6 +93,12 @@ namespace CGZBot2.Handlers
 
 				voice.ReportMessage = channel.SendMessageAsync(builder.Build()).Result;
 			}
+		}
+
+		private void ChannelDeleteTaskCompleted(CreatedVoiceChannel channel)
+		{
+			createdVoices[channel.Channel.Guild].Remove(channel); UpdateReports(channel.Channel.Guild);
+			HandlerState.Set(typeof(VoiceHandler), nameof(createdVoices), createdVoices);
 		}
 	}
 }

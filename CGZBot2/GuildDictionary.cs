@@ -1,11 +1,12 @@
 ﻿using DSharpPlus.CommandsNext;
 using DSharpPlus.Entities;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 
 namespace CGZBot2
 {
-	class GuildDictionary<T> : Dictionary<DiscordGuild, T>
+	class GuildDictionary<T> : Dictionary<DiscordGuild, T>, IGuildDictionary
 	{
 		public Func<T> DefaultValueFactory { get; init; } = () => default;
 
@@ -22,4 +23,6 @@ namespace CGZBot2
 			set { if (!ContainsKey(guild)) Add(guild, value); else base[guild] = value; }
 		}
 	}
+
+	interface IGuildDictionary : IDictionary { }
 }

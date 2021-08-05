@@ -10,18 +10,18 @@ using System.Threading.Tasks;
 
 namespace CGZBot2.Processors
 {
-	class GuildSettingsProcessor : ITypeSerializationProcessor
+	class GuildDictionaryProcessor : ITypeSerializationProcessor
 	{
 		public int Priority => 0;
 
 		public bool CanProcess(Type type)
 		{
-			return type.FullName.StartsWith("CGZBot2.GuildDictionary`");
+			return typeof(IGuildDictionary).IsAssignableFrom(type);
 		}
 
 		public void Prepare(object origin, ObjectsDataSetBuilder builder, ISerializator invoker, string rootId = "")
 		{
-			var dic = (IDictionary)origin;
+			var dic = (IGuildDictionary)origin;
 			builder.SetNamespace(rootId);
 
 			builder.Root.AddNumber("count", dic.Count);
@@ -33,7 +33,7 @@ namespace CGZBot2.Processors
 				builder.Root.AddNumber("key-" + i, keys[i].Id);
 
 				if (builder.AddObject(val, "val-" + i + "/", out var col, out var refer))
-					invoker.Prepare(val, builder, rootId + "val-" + i + "/");
+					invoker.Prepare(val, builder, "val-" + i + "/");
 				builder.Root.AddReference("val-" + i, refer);
 			}
 
@@ -42,7 +42,7 @@ namespace CGZBot2.Processors
 
 		public object Restore(object baseFeature, ObjectsDataSet obj, IDeserializator invoker, string rootId = "")
 		{
-			var dic = (IDictionary)(baseFeature ?? new Dictionary<DiscordGuild, object>());
+			var dic = (IGuildDictionary)(baseFeature ?? new GuildDictionary<object>());
 			var root = obj.GetEntry(rootId).Data;
 			var count = (int)root.ReadPrimitive("count");
 
