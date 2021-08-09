@@ -13,10 +13,10 @@
 
   <ItemGroup>
     <Reference Include="LloydLion.Serialization.Common">
-      <HintPath>..\..\Serialization\SerializationJson\bin\Debug\netcoreapp3.1\LloydLion.Serialization.Common.dll</HintPath>
+      <HintPath>..\libs\LloydLion.Serialization.Common.dll</HintPath>
     </Reference>
     <Reference Include="LloydLion.Serialization.Json">
-      <HintPath>..\..\Serialization\SerializationJson\bin\Debug\netcoreapp3.1\LloydLion.Serialization.Json.dll</HintPath>
+      <HintPath>..\libs\LloydLion.Serialization.Json.dll</HintPath>
     </Reference>
   </ItemGroup>
 
