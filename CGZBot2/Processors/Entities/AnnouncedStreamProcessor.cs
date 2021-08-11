@@ -28,7 +28,6 @@ namespace CGZBot2.Processors.Entities
 			builder.Root.AddString("place", obj.Place);
 			builder.Root.AddString("place type", obj.PlaceType.ToString());
 			builder.Root.AddString("state", obj.State.ToString());
-			builder.Root.AddString("msg state", obj.ReportMessageType?.ToString() ?? "$null");
 
 			builder.Root.AddNumber("create date", obj.CreationDate.Ticks);
 			builder.Root.AddNumber("start date", obj.StartDate.Ticks);
@@ -38,10 +37,6 @@ namespace CGZBot2.Processors.Entities
 			if (builder.AddObject(obj.Creator, "creator/", out var col, out var refer))
 				invoker.Prepare(obj.Creator, builder, "creator/");
 			builder.Root.AddReference("creator", refer);
-
-			if (builder.AddObject(obj.ReportMessage, "rp msg/", out col, out refer))
-				invoker.Prepare(obj.ReportMessage, builder, "rp msg/");
-			builder.Root.AddReference("rp msg", refer);
 
 			builder.ReturnNamespace();
 		}
@@ -57,15 +52,6 @@ namespace CGZBot2.Processors.Entities
 
 			var state = (AnnouncedStream.StreamState)Enum.Parse
 				(typeof(AnnouncedStream.StreamState), (string)root.ReadPrimitive("state"));
-
-			var msgStateStr = (string)root.ReadPrimitive("msg state");
-
-			AnnouncedStream.StreamState? msgState;
-
-			if(msgStateStr == "$null")
-				msgState = null;
-			else
-				msgState = (AnnouncedStream.StreamState)Enum.Parse(typeof(AnnouncedStream.StreamState), msgStateStr);
 			
 
 			var createDate = new DateTime((long)root.ReadPrimitive("create date"));
@@ -89,12 +75,11 @@ namespace CGZBot2.Processors.Entities
 			var creator = invoker.Restore<DiscordMember>(null, typeof(DiscordMember),
 				obj, obj.GetEntryByRefInProp(root, "creator").Value.Id);
 
-			var rpMsg = invoker.Restore<DiscordMessage>(null, typeof(DiscordMessage),
-				obj, obj.GetEntryByRefInProp(root, "rp msg").Value.Id);
-
 
 			return new AnnouncedStream(name, creator, startDate, place, placeType)
-				{ CreationDate = createDate, RealStartDate = realStartDate, FinishDate = finishDate };
+			{ 
+				CreationDate = createDate, RealStartDate = realStartDate, FinishDate = finishDate, State = state
+			};
 		}
 	}
 }
