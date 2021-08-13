@@ -32,5 +32,17 @@ namespace CGZBot2
 				tmsg.Result.TryDelete();
 			});
 		}
+
+		public static void CopyTo<T>(this IReadOnlyCollection<T> obj, ICollection<T> target)
+		{
+			foreach (var el in obj)
+				target.Add(el);
+		}
+
+		public static void CopyTo<T>(this IReadOnlyList<T> obj, IList<T> target)
+		{
+			foreach (var el in obj)
+				target.Add(el);
+		}
 	}
 }
