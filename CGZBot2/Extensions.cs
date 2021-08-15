@@ -44,5 +44,13 @@ namespace CGZBot2
 			foreach (var el in obj)
 				target.Add(el);
 		}
+
+		public static void AddRange<T>(this ICollection<T> col, IEnumerable<T> toAdd)
+		{
+			foreach (var item in toAdd)
+			{
+				col.Add(item);
+			}
+		}
 	}
 }

@@ -41,6 +41,8 @@ namespace CGZBot2.Entities
 
 		public DiscordMember Creator { get; }
 
+		public DiscordChannel CreatedVoice { get; set; }
+
 		public object MsgSyncRoot { get; } = new object();
 
 		public DiscordMessage ReportMessage { get; set; }
@@ -51,7 +53,7 @@ namespace CGZBot2.Entities
 
 		public bool IsWaitingForCreator { get; set; }
 
-		public IReadOnlyCollection<DiscordMember> TeamMembers { get => members; init => value.CopyTo(members); }
+		public ICollection<DiscordMember> TeamMembers { get => members; init => ((IReadOnlyCollection<DiscordMember>)value).CopyTo(members); }
 
 		public string GameName { get; set; }
 
@@ -59,7 +61,7 @@ namespace CGZBot2.Entities
 
 		public int TargetMembersCount { get; set; }
 
-		public IReadOnlyCollection<DiscordMember> Invited { get => invited; set { invited.Clear(); value.CopyTo(invited); } }
+		public ICollection<DiscordMember> Invited { get => invited; set { invited.Clear(); ((IReadOnlyCollection<DiscordMember>)value).CopyTo(invited); } }
 
 		public Task MembersWaitTask { get; }
 
@@ -106,16 +108,6 @@ namespace CGZBot2.Entities
 		{
 			state = GameState.Canceled;
 			Canceled?.Invoke(this);
-		}
-
-		public void AddTeamMember(DiscordMember member)
-		{
-			members.Add(member);
-		}
-
-		public void AddTeamMemberRange(IReadOnlyCollection<DiscordMember> members)
-		{
-			this.members.AddRange(members);
 		}
 
 		public Task LaunchWaitTask()
