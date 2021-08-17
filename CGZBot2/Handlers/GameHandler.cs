@@ -23,6 +23,10 @@ namespace CGZBot2.Handlers
 			//new() { DefaultValueFactory = () => new List<TeamGame>() };
 			HandlerState.Get(typeof(GameHandler), nameof(startedGames), () => new List<TeamGame>());
 
+		private static readonly GuildDictionary<List<MembersParty>> parties =
+			new() { DefaultValueFactory = () => new List<MembersParty>() };
+			//HandlerState.Get(typeof(GameHandler), nameof(parties), () => new List<TeamGame>());
+
 
 		public GameHandler()
 		{
@@ -93,18 +97,11 @@ namespace CGZBot2.Handlers
 		public Task CancelGame(CommandContext ctx,
 			[Description("Имя отменяймой игры")] string name)
 		{
-			var games = startedGames[ctx].Where(s => s.Creator == ctx.Member && s.GameName == name).ToArray();
+			var game = GetGame(ctx, name);
+			if (game == null) return Task.CompletedTask;
 
-			if (games.Length == 0)
-			{
-				ctx.RespondAsync("Такой игры не существует.\r\nПоиск шёл только среди **ваших** игр").TryDeleteAfter(8000);
-				return Task.CompletedTask;
-			}
-
-			if (games.Length > 1) throw new Exception("Ce Pi**ec");
-
-			games.Single().Cancel();
-			startedGames[ctx].Remove(games.Single());
+			game.Cancel();
+			startedGames[ctx].Remove(game);
 			ctx.RespondAsync("Игра успешно отменёна").TryDeleteAfter(8000);
 
 			return Task.CompletedTask;
@@ -119,17 +116,8 @@ namespace CGZBot2.Handlers
 				"reqAllInv - требование всех приглашённых участников, description - описание")] string paramName,
 			[Description("Новое значение")] string newValue)
 		{
-			var games = startedGames[ctx].Where(s => s.Creator == ctx.Member && s.GameName == name).ToArray();
-
-			if (games.Length == 0)
-			{
-				ctx.RespondAsync("Такого стрима не существует.\r\nПоиск шёл только среди **ваших** стримов").TryDeleteAfter(8000);
-				return;
-			}
-
-			if (games.Length > 1) throw new Exception("Ce Pi**ec");
-
-			var game = games.Single();
+			var game = GetGame(ctx, name);
+			if (game == null) return;
 
 			switch (paramName)
 			{
@@ -169,17 +157,8 @@ namespace CGZBot2.Handlers
 		[Command("change-game-inv")]
 		public Task ChangeInvited(CommandContext ctx, string name, params DiscordMember[] invited)
 		{
-			var games = startedGames[ctx].Where(s => s.Creator == ctx.Member && s.GameName == name).ToArray();
-
-			if (games.Length == 0)
-			{
-				ctx.RespondAsync("Такого стрима не существует.\r\nПоиск шёл только среди **ваших** стримов").TryDeleteAfter(8000);
-				return Task.CompletedTask;
-			}
-
-			if (games.Length > 1) throw new Exception("Ce Pi**ec");
-
-			var game = games.Single();
+			var game = GetGame(ctx, name);
+			if (game == null) return Task.CompletedTask;
 
 			game.Invited = invited;
 			game.RequestReportMessageUpdate();
@@ -187,25 +166,217 @@ namespace CGZBot2.Handlers
 			return Task.CompletedTask;
 		}
 
-		[Command("add-game-inv")]
+		[Command("invite-togame")]
 		public Task AddInvited(CommandContext ctx, string name, params DiscordMember[] invited)
 		{
-			var games = startedGames[ctx].Where(s => s.Creator == ctx.Member && s.GameName == name).ToArray();
-
-			if (games.Length == 0)
-			{
-				ctx.RespondAsync("Такого стрима не существует.\r\nПоиск шёл только среди **ваших** стримов").TryDeleteAfter(8000);
-				return Task.CompletedTask;
-			}
-
-			if (games.Length > 1) throw new Exception("Ce Pi**ec");
-
-			var game = games.Single();
+			var game = GetGame(ctx, name);
+			if (game == null) return Task.CompletedTask;
 
 			game.Invited.AddRange(invited);
 			game.RequestReportMessageUpdate();
 			UpdateReports(game.Guild);
 			return Task.CompletedTask;
+		}
+
+		[Command("send-game-invs")]
+		public Task SendInvites(CommandContext ctx, string gameName)
+		{
+			var game = GetGame(ctx, gameName);
+			if (game == null) return Task.CompletedTask;
+
+			foreach (var member in game.Invited)
+			{
+				member.CreateDmChannelAsync().Result.SendMessageAsync
+					($"Вы были приглашены на игру в {game.GameName} на сервере {game.Guild.Name} от {game.Creator.Mention}");
+			}
+
+			return Task.CompletedTask;
+		}
+
+		[Command("invite-party")]
+		public Task AddPatryToInvited(CommandContext ctx, string gameName, string partyName)
+		{
+			var game = GetGame(ctx, gameName);
+			if (game == null) return Task.CompletedTask;
+
+			var party = GetParty(ctx, partyName);
+			if (party == null) return Task.CompletedTask;
+
+			game.Invited.AddRange(party.Members);
+			game.RequestReportMessageUpdate();
+			UpdateReports(game.Guild);
+			return Task.CompletedTask;
+		}
+
+		[Command("party")]
+		public Task CreateParty(CommandContext ctx, string name, params DiscordMember[] members)
+		{
+			if(parties[ctx].Any(s => s.Name == name))
+			{
+				ctx.RespondAsync("Пати с таким именем уже сушествует").TryDeleteAfter(8000);
+				return Task.CompletedTask;
+			}
+
+			var party = new MembersParty(ctx.Member, name);
+			party.Members.AddRange(members);
+			party.Members.Add(party.Creator);
+
+			parties[ctx].Add(party);
+			ctx.RespondAsync("Пати успешно создано").TryDeleteAfter(8000);
+			return Task.CompletedTask;
+		}
+
+		[Command("delete-party")]
+		public Task DeleteParty(CommandContext ctx, string name)
+		{
+			var party = GetPartyPrivate(ctx, name);
+			if (party == null) return Task.CompletedTask;
+
+			parties[ctx].Remove(party);
+			ctx.RespondAsync("Пати успешно удалён").TryDeleteAfter(8000);
+
+			return Task.CompletedTask;
+		}
+
+		[Command("list-parties")]
+		public Task ListParties(CommandContext ctx)
+		{
+			var partiesSel1 = parties[ctx].Where(s => s.Members.Contains(ctx.Member)).ToList();
+			var partiesSel2 = parties[ctx].Where(s => !s.Members.Contains(ctx.Member)).ToList();
+
+			var fieldVal1 = string.Join("\n", partiesSel1.Select(s => s.Name + (s.Creator == ctx.Member ? " [Вы владелец]" : " - от " + s.Creator.Mention)));
+			var fieldVal2 = string.Join("\n", partiesSel2.Select(s => s.Name + (s.Creator == ctx.Member ? " [Вы владелец]" : " - от " + s.Creator.Mention)));
+
+			var builder = new DiscordEmbedBuilder();
+
+			builder
+				.WithAuthor(ctx.Member.DisplayName, iconUrl: ctx.Member.AvatarUrl)
+				.WithTimestamp(DateTime.Now)
+				.WithColor(DiscordColor.Gold);
+
+			if (string.IsNullOrWhiteSpace(fieldVal1) == false)
+				builder.AddField("Ваши пати", fieldVal1);
+			else
+				builder.AddField("Вы не состоите не в одном пати", "Вы можете просоединится к одному из пати ниже или создать своё");
+
+			if (string.IsNullOrWhiteSpace(fieldVal2) == false)
+				builder.AddField("Доступные пати", fieldVal2);
+			else
+				builder.AddField("Доступные пати", "На этом сервере нет доступных пати");
+
+			ctx.RespondAsync(builder).TryDeleteAfter(20000);
+
+			return Task.CompletedTask;
+		}
+
+		[Command("list-party")]
+		public Task ListParty(CommandContext ctx, string partyName)
+		{
+			var party = GetParty(ctx, partyName);
+			if (party == null) return Task.CompletedTask;
+
+			var fieldVal = string.Join(", ", party.Members.Select(s => s.Mention));
+
+			var builder = new DiscordEmbedBuilder();
+
+			ctx.RespondAsync(builder).TryDeleteAfter(20000);
+			return Task.CompletedTask;
+		}
+
+		[Command("join-party-req")]
+		public Task SendJoinRequest(CommandContext ctx, string partyName)
+		{
+			var party = GetParty(ctx, partyName);
+			if (party == null) return Task.CompletedTask;
+
+			party.Creator.CreateDmChannelAsync().Result.SendMessageAsync
+				($"Отправлен запрос на присоединение к пати {party.Name} на сервере {party.Creator.Guild.Name} от {ctx.Member.Mention}");
+			return Task.CompletedTask;
+		}
+
+		[Command("kick-party")]
+		public Task KickPartyMember(CommandContext ctx, string partyName, DiscordMember member)
+		{
+			var party = GetPartyPrivate(ctx, partyName);
+			if (party == null) return Task.CompletedTask;
+
+			if (party.Creator == member)
+			{
+				ctx.RespondAsync("Вы не можете выгнать себя т.к. вы создатель пати").TryDeleteAfter(8000);
+				return Task.CompletedTask;
+			}
+
+			if (party.Members.Remove(member))
+			{
+				ctx.RespondAsync("Участник успешно кикнут").TryDeleteAfter(8000);
+			}
+			else
+			{
+				ctx.RespondAsync("Участник уже нет в этом пати").TryDeleteAfter(8000);
+			}
+
+			return Task.CompletedTask;
+		}
+
+		[Command("join-party")]
+		public Task JoinMember(CommandContext ctx, string partyName, DiscordMember member)
+		{
+			var party = GetPartyPrivate(ctx, partyName);
+			if (party == null) return Task.CompletedTask;
+
+			if (party.Members.Contains(member))
+			{
+				ctx.RespondAsync("Участник уже состоит в этом пати").TryDeleteAfter(8000);
+			}
+			else
+			{
+				party.Members.Add(member);
+				ctx.RespondAsync("Участник успешно добавлен в пати").TryDeleteAfter(8000);
+			}
+
+			return Task.CompletedTask;
+		}
+
+		private TeamGame GetGame(CommandContext ctx, string gameName)
+		{
+			var games = startedGames[ctx].Where(s => s.Creator == ctx.Member && s.GameName == gameName).ToArray();
+
+			if (games.Length == 0)
+			{
+				ctx.RespondAsync("Такой игры не существует.\r\nПоиск шёл только среди **ваших** игр").TryDeleteAfter(8000);
+				return null;
+			}
+
+			if (games.Length > 1) throw new Exception("Ce Pi**ec");
+			return games.Single();
+		}
+
+		private MembersParty GetParty(CommandContext ctx, string partyName)
+		{
+			var partiesSel = parties[ctx].Where(s => s.Name == partyName).ToArray();
+
+			if (partiesSel.Length == 0)
+			{
+				ctx.RespondAsync("Такого пати не существует.\r\nПоиск шёл среди **всех** пати на сервере").TryDeleteAfter(8000);
+				return null;
+			}
+
+			if (partiesSel.Length > 1) throw new Exception("Ce Pi**ec");
+			return partiesSel.Single();
+		}
+
+		private MembersParty GetPartyPrivate(CommandContext ctx, string partyName)
+		{
+			var partiesSel = parties[ctx].Where(s => ctx.Member == s.Creator && s.Name == partyName).ToArray();
+
+			if (partiesSel.Length == 0)
+			{
+				ctx.RespondAsync("Такого пати не существует.\r\nПоиск шёл только среди **ваших** пати").TryDeleteAfter(8000);
+				return null;
+			}
+
+			if (partiesSel.Length > 1) throw new Exception("Ce Pi**ec");
+			return partiesSel.Single();
 		}
 
 		private void UpdateReports(DiscordGuild guild)
