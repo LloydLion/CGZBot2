@@ -25,6 +25,17 @@ namespace CGZBot2.Handlers
 		public DiscussionHandler()
 		{
 			Program.Client.ChannelDeleted += OnChannelDeleted;
+
+			foreach (var l in channels)
+			{
+				foreach (var channel in l.Value)
+				{
+					channel.Confirmed += DisChannelConfirmHandler;
+					channel.Deleted += DisChannelDeletedHandler;
+					channel.ConfirmWait = ChannelConfirmPredecate;
+					if(!channel.IsConfirmed && !channel.IsDeleted) channel.ConfirmWaitTask.Start();
+				}
+			}
 		}
 
 
