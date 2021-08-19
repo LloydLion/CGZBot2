@@ -18,8 +18,8 @@ namespace CGZBot2.Handlers
 			BotSettings.Load<List<DiscordChannel>>(typeof(DiscussionHandler), nameof(categories));
 
 		private readonly GuildDictionary<List<DiscussionChannel>> channels =
-			new() { DefaultValueFactory = () => new List<DiscussionChannel>() };
-			//HandlerState.Get(typeof(DiscussionHandler), nameof(channels), () => new List<DiscussionChannel>());
+			//new() { DefaultValueFactory = () => new List<DiscussionChannel>() };
+			HandlerState.Get(typeof(DiscussionHandler), nameof(channels), () => new List<DiscussionChannel>());
 
 
 		public DiscussionHandler()
@@ -43,7 +43,8 @@ namespace CGZBot2.Handlers
 			channel.ConfirmMessage.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":white_check_mark:")).Wait();
 			channel.ConfirmMessage.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":x:")).Wait();
 
-			channel.Confirmed += ChannelConfirmHandler;
+			channel.Confirmed += DisChannelConfirmHandler;
+			channel.Deleted += DisChannelDeletedHandler;
 			channel.ConfirmWait = ChannelConfirmPredecate;
 			channel.ConfirmWaitTask.Start();
 
@@ -82,9 +83,15 @@ namespace CGZBot2.Handlers
 			return Task.CompletedTask;
 		}
 
-		private void ChannelConfirmHandler(DiscussionChannel channel)
+		private void DisChannelConfirmHandler(DiscussionChannel channel)
 		{
 			channel.ConfirmMessage.DeleteAsync();
+			HandlerState.Set(typeof(DiscussionHandler), nameof(channels), channels);
+		}
+
+		private void DisChannelDeletedHandler(DiscussionChannel channel)
+		{
+			HandlerState.Set(typeof(DiscussionHandler), nameof(channels), channels);
 		}
 
 		private bool ChannelConfirmPredecate(DiscussionChannel channel)
