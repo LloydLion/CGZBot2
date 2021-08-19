@@ -52,5 +52,10 @@ namespace CGZBot2
 				col.Add(item);
 			}
 		}
+
+		public static DisRole ToDisRole(this DiscordRole role, DiscordGuild guild)
+		{
+			return new DisRole(role, guild);
+		}
 	}
 }

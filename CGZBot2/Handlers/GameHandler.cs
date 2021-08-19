@@ -279,6 +279,12 @@ namespace CGZBot2.Handlers
 
 			var builder = new DiscordEmbedBuilder();
 
+			builder
+				.WithTitle("Информация о пати " + partyName)
+				.WithColor(DiscordColor.IndianRed)
+				.AddField("Создатель", party.Creator.Mention)
+				.AddField("Участники", fieldVal);
+
 			ctx.RespondAsync(builder).TryDeleteAfter(20000);
 			return Task.CompletedTask;
 		}

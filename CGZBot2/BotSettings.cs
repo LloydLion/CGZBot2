@@ -35,7 +35,7 @@ namespace CGZBot2
 
 			var ser = SerializatorProvider.DefaultSerializator;
 
-			ser.WriteAsync(settings, new StreamWriter(file));
+			ser.WriteAsync(settings, new StreamWriter(file)).Wait();
 			file.Flush();
 			file.Close();
 		}
