@@ -57,5 +57,7 @@ namespace CGZBot2
 		{
 			return new DisRole(role, guild);
 		}
+
+		public static DateTime AddTo(this TimeSpan time, DateTime dateTime) => dateTime + time;
 	}
 }
