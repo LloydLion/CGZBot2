@@ -24,8 +24,12 @@ namespace CGZBot2.Handlers
 			HandlerState.Get(typeof(GameHandler), nameof(startedGames), () => new List<TeamGame>());
 
 		private static readonly GuildDictionary<List<MembersParty>> parties =
-			new() { DefaultValueFactory = () => new List<MembersParty>() };
-			//HandlerState.Get(typeof(GameHandler), nameof(parties), () => new List<TeamGame>());
+			//new() { DefaultValueFactory = () => new List<MembersParty>() };
+			HandlerState.Get(typeof(GameHandler), nameof(parties), () => new List<MembersParty>());
+
+
+		public static event Action<TeamGame> GameCreated;
+		public static event Action<MembersParty> PartyCreated;
 
 
 		public GameHandler()
@@ -76,7 +80,6 @@ namespace CGZBot2.Handlers
 			}
 
 			var game = new TeamGame(ctx.Member, name, description, targetMemberCount) { Invited = invites, ReqAllInvited = reqAllInvited };
-			startedGames[ctx].Add(game);
 
 			game.MembersWait = MembersWaitPredicate;
 			game.GameEndWait = EndWaitPredicate;
@@ -85,6 +88,9 @@ namespace CGZBot2.Handlers
 			game.Finished += FinishedGameHandler;
 			game.Canceled += CanceledGameHandler;
 
+			GameCreated?.Invoke(game);
+
+			startedGames[ctx].Add(game);
 			UpdateReports(ctx.Guild);
 
 			game.MembersWaitTask.Start();
@@ -220,6 +226,8 @@ namespace CGZBot2.Handlers
 			var party = new MembersParty(ctx.Member, name);
 			party.Members.AddRange(members);
 			party.Members.Add(party.Creator);
+
+			PartyCreated?.Invoke(party);
 
 			parties[ctx].Add(party);
 			ctx.RespondAsync("Пати успешно создано").TryDeleteAfter(8000);

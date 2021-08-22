@@ -20,7 +20,10 @@ namespace CGZBot2.Handlers
 
 		private GuildDictionary<List<MemberMuteStatus>> mutes =
 			HandlerState.Get(typeof(MuteHandler), nameof(mutes), () => new List<MemberMuteStatus>());
-			//new() { DefaultValueFactory = () => new List<MemberMuteStatus>() };
+		//new() { DefaultValueFactory = () => new List<MemberMuteStatus>() };
+
+
+		public static event Action<MemberMuteStatus> MemberMuted;
 
 
 		public MuteHandler()
@@ -159,6 +162,8 @@ namespace CGZBot2.Handlers
 
 			var ret = new MemberMuteStatus(member, timeout, reason);
 			ret.Cleared += MemberMuteClearHandler;
+
+			MemberMuted?.Invoke(ret);
 
 			ret.ClearWaitTask.Start();
 			return ret;

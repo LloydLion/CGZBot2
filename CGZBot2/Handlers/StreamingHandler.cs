@@ -22,6 +22,9 @@ namespace CGZBot2.Handlers
 			HandlerState.Get(typeof(StreamingHandler), nameof(announcedStreams), () => new List<AnnouncedStream>());
 
 
+		public static event Action<AnnouncedStream> StreamCreated;
+
+
 		public StreamingHandler()
 		{
 			foreach (var l in announcedStreams)
@@ -87,6 +90,8 @@ namespace CGZBot2.Handlers
 			stream.StartWait = StartWaitPredicate;
 			stream.StreamerWait = StreamerWaitPredicate;
 			stream.StreamEndWait = StreamEndPredicate;
+
+			StreamCreated?.Invoke(stream);
 
 			announcedStreams[ctx].Add(stream);
 			UpdateReports(ctx.Guild);

@@ -22,6 +22,9 @@ namespace CGZBot2.Handlers
 			HandlerState.Get(typeof(DiscussionHandler), nameof(channels), () => new List<DiscussionChannel>());
 
 
+		public static event Action<DiscussionChannel, DiscordMember> DiscussionCreated;
+
+
 		public DiscussionHandler()
 		{
 			Program.Client.ChannelDeleted += OnChannelDeleted;
@@ -57,6 +60,9 @@ namespace CGZBot2.Handlers
 			channel.Confirmed += DisChannelConfirmHandler;
 			channel.Deleted += DisChannelDeletedHandler;
 			channel.ConfirmWait = ChannelConfirmPredecate;
+
+			DiscussionCreated?.Invoke(channel, ctx.Member);
+
 			channel.ConfirmWaitTask.Start();
 
 			return Task.CompletedTask;

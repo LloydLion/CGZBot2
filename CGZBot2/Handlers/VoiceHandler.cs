@@ -23,6 +23,9 @@ namespace CGZBot2.Handlers
 			HandlerState.Get(typeof(VoiceHandler), nameof(createdVoices), () => new List<CreatedVoiceChannel>());
 
 
+		public static event Action<CreatedVoiceChannel> ChannelCreated;
+
+
 		public VoiceHandler()
 		{
 			foreach (var d in createdVoices)
@@ -58,15 +61,14 @@ namespace CGZBot2.Handlers
 			var channel = new CreatedVoiceChannel(creator: ctx.Member, channel:
 				await ctx.Guild.CreateChannelAsync(name, ChannelType.Voice, category, overwrites: overs));
 
+			ChannelCreated?.Invoke(channel);
+
 			createdVoices[ctx].Add(channel);
 			UpdateReports(ctx.Guild);
 
 			await Task.Delay(10000);
 
-			channel.DeleteTask.GetAwaiter().OnCompleted(() =>
-			{
-				ChannelDeleted(channel);
-			});
+			channel.Deleted += ChannelDeleted;
 
 			channel.DeleteTask.Start();
 		}
