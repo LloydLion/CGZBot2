@@ -1,4 +1,5 @@
-﻿using DSharpPlus.Entities;
+﻿using DSharpPlus.CommandsNext;
+using DSharpPlus.Entities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -36,8 +37,11 @@ namespace CGZBot2.Entities
 
 		public int NextLevelCost => Level >= LevelsCost.Count ? LevelsCost.Last() : LevelsCost[Level];
 
+		public DiscordGuild Guild => Member.Guild;
+
 
 		public event Action<MemberReputation> ReputationChanged;
+		public event Action<MemberReputation, int> LevelChanged;
 
 
 		public void GiveReputation(int rp)
@@ -61,6 +65,7 @@ namespace CGZBot2.Entities
 				levelrp -= NextLevelCost;
 				lastrp += NextLevelCost;
 				level++;
+				LevelChanged.Invoke(this, 1);
 			}
 		}
 	}

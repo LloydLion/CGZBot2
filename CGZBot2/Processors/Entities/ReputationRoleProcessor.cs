@@ -34,7 +34,7 @@ namespace CGZBot2.Processors.Entities
 		{
 			var root = obj.GetEntry(rootId).Data;
 			var guild = Program.Client.GetGuildAsync((ulong)root.ReadPrimitive("guild")).Result;
-			return new ReputationRole(guild.GetRole((ulong)root.ReadPrimitive("id")).ToDisRole(guild), (int)root.ReadPrimitive("level"));
+			return new ReputationRole(guild.GetRole((ulong)root.ReadPrimitive("role")).ToDisRole(guild), (int)root.ReadPrimitive("level"));
 		}
 	}
 }

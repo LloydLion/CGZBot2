@@ -6,14 +6,15 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace CGZBot2.Handlers
 {
 	class ReputationHandler : BaseCommandModule
 	{
-		//private static readonly GuildDictionary<List<ReputationRole>> rpRoles =
-		//	BotSettings.Load<List<ReputationRole>>(typeof(ReputationHandler), nameof(rpRoles));
+		private static readonly GuildDictionary<List<ReputationRole>> rpRoles =
+			BotSettings.Load<List<ReputationRole>>(typeof(ReputationHandler), nameof(rpRoles));
 
 		private readonly GuildDictionary<List<MemberReputation>> reputation =
 			new() { DefaultValueFactory = () => new List<MemberReputation>() };
@@ -56,7 +57,18 @@ namespace CGZBot2.Handlers
 
 			withTimeRpDecrisingTask = new Task
 			(() => {
-				//Desrising logic
+				while(true)
+				{
+					Thread.Sleep(new TimeSpan(6, 0, 0));
+
+					foreach (var l in reputation)
+					{
+						foreach (var member in l.Value)
+						{
+							member.RevokeReputation(20);
+						}
+					}
+				}
 			});
 		}
 
@@ -103,6 +115,9 @@ namespace CGZBot2.Handlers
 			if(mems.Count == 0)
 			{
 				var rp = new MemberReputation(member);
+
+				rp.LevelChanged += ReputationLevelChanged;
+
 				reputation[member.Guild].Add(rp);
 				return rp;
 			}
@@ -111,12 +126,27 @@ namespace CGZBot2.Handlers
 			return mems.Single();
 		}
 
+		private void ReputationLevelChanged(MemberReputation rp, int levelChange)
+		{
+			var member = rp.Member;
+			var troles = rpRoles[rp.Guild].Where(s => s.TargetLevel <= rp.Level).Select(s => s.Role.Origin).ToList();
+			var roles = member.Roles.Intersect(rpRoles[rp.Guild].Select(s => s.Role.Origin));
+
+			foreach (var role in roles)
+				if (!troles.Contains(role))
+					member.RevokeRoleAsync(role).Wait();
+
+			foreach (var role in troles)
+				if (!roles.Contains(role))
+					member.GrantRoleAsync(role).Wait();
+		}
+
 		private void ActionHandler(DiscordMember member, ActionType action)
 		{
 			var rp = rpGive[action];
 			var rpobj = GetReputation(member);
 
-			if (rp < 0) rpobj.RevokeReputation(rp);
+			if (rp < 0) rpobj.RevokeReputation(-rp);
 			else if(rp > 0) rpobj.GiveReputation(rp);
 
 			//HandlerState.Set(typeof(ReputationHandler), nameof(reputation), reputation);
