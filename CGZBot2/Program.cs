@@ -70,6 +70,7 @@ namespace CGZBot2
 
 			Client.GetCommandsNext().CommandExecuted += (sender, args) =>
 			{
+				args?.Context?.Message?.TryDeleteAfter(20000);
 				HandlerState.SaveAll();
 				return Task.CompletedTask;
 			};

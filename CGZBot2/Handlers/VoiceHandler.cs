@@ -56,7 +56,7 @@ namespace CGZBot2.Handlers
 				return;
 			}
 
-			var overs = new DiscordOverwriteBuilder[] { new DiscordOverwriteBuilder().For(ctx.Member).Allow(Permissions.All) };
+			var overs = new DiscordOverwriteBuilder[] { new DiscordOverwriteBuilder(ctx.Member).Allow(Permissions.All) };
 
 			var channel = new CreatedVoiceChannel(creator: ctx.Member, channel:
 				await ctx.Guild.CreateChannelAsync(name, ChannelType.Voice, category, overwrites: overs));

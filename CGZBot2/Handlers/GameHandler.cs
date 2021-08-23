@@ -457,7 +457,7 @@ namespace CGZBot2.Handlers
 			foreach (var member in game.TeamMembers)
 				member.CreateDmChannelAsync().Result.SendMessageAsync($"Игра в {game.GameName} от {game.Creator.Mention} началась.");
 
-			var overs = new DiscordOverwriteBuilder[] { new DiscordOverwriteBuilder().For(game.Creator).Allow(DSharpPlus.Permissions.All) };
+			var overs = new DiscordOverwriteBuilder[] { new DiscordOverwriteBuilder(game.Creator).Allow(DSharpPlus.Permissions.All) };
 			game.CreatedVoice = game.Guild.CreateChannelAsync("Игра в " + game.GameName, DSharpPlus.ChannelType.Voice, voiceCreationCategory[game.Guild], overwrites: overs).Result;
 
 			var members = game.ReportMessage.GetReactionsAsync(DiscordEmoji.FromName(Program.Client, ":ok_hand:")).Result.Where(s => !s.IsBot);
