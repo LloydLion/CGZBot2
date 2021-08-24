@@ -18,7 +18,6 @@ namespace CGZBot2.Handlers
 			BotSettings.Load<List<DiscordChannel>>(typeof(DiscussionHandler), nameof(categories));
 
 		private readonly GuildDictionary<List<DiscussionChannel>> channels =
-			//new() { DefaultValueFactory = () => new List<DiscussionChannel>() };
 			HandlerState.Get(typeof(DiscussionHandler), nameof(channels), () => new List<DiscussionChannel>());
 
 
@@ -43,7 +42,9 @@ namespace CGZBot2.Handlers
 
 
 		[Command("discuss")]
-		public Task CreateDiscussion(CommandContext ctx, string name)
+		[Description("Создаёт дисскусию в этой категории")]
+		public Task CreateDiscussion(CommandContext ctx,
+			[Description("Тема")] string name)
 		{
 			if (CheckDiscussionCategory(ctx.Channel, ctx)) return Task.CompletedTask;
 
@@ -69,6 +70,7 @@ namespace CGZBot2.Handlers
 		}
 
 		[Command("close-discuss")]
+		[Description("Закрывает дисскусию в которой была написана")]
 		public Task CloseDiscussion(CommandContext ctx)
 		{
 			if (CheckDiscussionCategory(ctx.Channel, ctx)) return Task.CompletedTask;
@@ -88,6 +90,7 @@ namespace CGZBot2.Handlers
 		}
 
 		[Command("isdiscuss")]
+		[Description("Проверяет является ли текущий канал дисскусией")]
 		public Task IsDiscuss(CommandContext ctx)
 		{
 			if (CheckDiscussionCategory(ctx.Channel, ctx)) return Task.CompletedTask;

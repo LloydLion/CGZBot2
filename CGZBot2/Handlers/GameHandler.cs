@@ -20,11 +20,9 @@ namespace CGZBot2.Handlers
 
 
 		private static readonly GuildDictionary<List<TeamGame>> startedGames =
-			//new() { DefaultValueFactory = () => new List<TeamGame>() };
 			HandlerState.Get(typeof(GameHandler), nameof(startedGames), () => new List<TeamGame>());
 
 		private static readonly GuildDictionary<List<MembersParty>> parties =
-			//new() { DefaultValueFactory = () => new List<MembersParty>() };
 			HandlerState.Get(typeof(GameHandler), nameof(parties), () => new List<MembersParty>());
 
 
@@ -160,20 +158,25 @@ namespace CGZBot2.Handlers
 			UpdateReports(ctx.Guild);
 		}
 
-		[Command("change-game-inv")]
-		public Task ChangeInvited(CommandContext ctx, string name, params DiscordMember[] invited)
+		[Command("clear-game-invs")]
+		[Description("Отменяет все приглашения у указаной игры")]
+		public Task ChangeInvited(CommandContext ctx,
+			[Description("Название игры")] string name)
 		{
 			var game = GetGame(ctx, name);
 			if (game == null) return Task.CompletedTask;
 
-			game.Invited = invited;
+			game.Invited.Clear();
 			game.RequestReportMessageUpdate();
 			UpdateReports(game.Guild);
 			return Task.CompletedTask;
 		}
 
 		[Command("invite-togame")]
-		public Task AddInvited(CommandContext ctx, string name, params DiscordMember[] invited)
+		[Description("Приглашает людей в игру")]
+		public Task AddInvited(CommandContext ctx,
+			[Description("Название игры")] string name,
+			[Description("Приглашения для участников")] params DiscordMember[] invited)
 		{
 			var game = GetGame(ctx, name);
 			if (game == null) return Task.CompletedTask;
@@ -185,22 +188,26 @@ namespace CGZBot2.Handlers
 		}
 
 		[Command("send-game-invs")]
-		public Task SendInvites(CommandContext ctx, string gameName)
+		[Description("Оправляет приглашения всем приглашённым участником в игре")]
+		public Task SendInvites(CommandContext ctx,
+			[Description("Название игры")] string gameName)
 		{
 			var game = GetGame(ctx, gameName);
 			if (game == null) return Task.CompletedTask;
 
 			foreach (var member in game.Invited)
 			{
-				member.CreateDmChannelAsync().Result.SendMessageAsync
-					($"Вы были приглашены на игру в {game.GameName} на сервере {game.Guild.Name} от {game.Creator.Mention}");
+				member.SendDicertMessage($"Вы были приглашены на игру в {game.GameName} на сервере {game.Guild.Name} от {game.Creator.Mention}");
 			}
 
 			return Task.CompletedTask;
 		}
 
 		[Command("invite-party")]
-		public Task AddPatryToInvited(CommandContext ctx, string gameName, string partyName)
+		[Description("Приглашает всех участников пати в игру")]
+		public Task AddPatryToInvited(CommandContext ctx,
+			[Description("Название игры")] string gameName,
+			[Description("Название игры")] string partyName)
 		{
 			var game = GetGame(ctx, gameName);
 			if (game == null) return Task.CompletedTask;
@@ -215,7 +222,10 @@ namespace CGZBot2.Handlers
 		}
 
 		[Command("party")]
-		public Task CreateParty(CommandContext ctx, string name, params DiscordMember[] members)
+		[Description("Создаёт пати с указанным списком участноков")]
+		public Task CreateParty(CommandContext ctx,
+			[Description("Название игры")] string name,
+			[Description("Участники")] params DiscordMember[] members)
 		{
 			if(parties[ctx].Any(s => s.Name == name))
 			{
@@ -235,7 +245,9 @@ namespace CGZBot2.Handlers
 		}
 
 		[Command("delete-party")]
-		public Task DeleteParty(CommandContext ctx, string name)
+		[Description("Удаляет пати с сервера (только создатель)")]
+		public Task DeleteParty(CommandContext ctx,
+			[Description("Название пати")] string name)
 		{
 			var party = GetPartyPrivate(ctx, name);
 			if (party == null) return Task.CompletedTask;
@@ -247,6 +259,7 @@ namespace CGZBot2.Handlers
 		}
 
 		[Command("list-parties")]
+		[Description("Показывает список пати на сервере")]
 		public Task ListParties(CommandContext ctx)
 		{
 			var partiesSel1 = parties[ctx].Where(s => s.Members.Contains(ctx.Member)).ToList();
@@ -278,7 +291,9 @@ namespace CGZBot2.Handlers
 		}
 
 		[Command("list-party")]
-		public Task ListParty(CommandContext ctx, string partyName)
+		[Description("Выводит информацию об указанном пати")]
+		public Task ListParty(CommandContext ctx,
+			[Description("Название пати")] string partyName)
 		{
 			var party = GetParty(ctx, partyName);
 			if (party == null) return Task.CompletedTask;
@@ -298,18 +313,22 @@ namespace CGZBot2.Handlers
 		}
 
 		[Command("join-party-req")]
-		public Task SendJoinRequest(CommandContext ctx, string partyName)
+		[Description("Отправляет запрос на присоединение к пати его создателю")]
+		public Task SendJoinRequest(CommandContext ctx,
+			[Description("Название пати")] string partyName)
 		{
 			var party = GetParty(ctx, partyName);
 			if (party == null) return Task.CompletedTask;
 
-			party.Creator.CreateDmChannelAsync().Result.SendMessageAsync
-				($"Отправлен запрос на присоединение к пати {party.Name} на сервере {party.Creator.Guild.Name} от {ctx.Member.Mention}");
+			party.Creator.SendDicertMessage($"Отправлен запрос на присоединение к пати {party.Name} на сервере {party.Creator.Guild.Name} от {ctx.Member.Mention}");
 			return Task.CompletedTask;
 		}
 
 		[Command("kick-party")]
-		public Task KickPartyMember(CommandContext ctx, string partyName, DiscordMember member)
+		[Description("Кикает участника из пати (только владелец)")]
+		public Task KickPartyMember(CommandContext ctx,
+			[Description("Название пати")] string partyName,
+			[Description("Участник")] DiscordMember member)
 		{
 			var party = GetPartyPrivate(ctx, partyName);
 			if (party == null) return Task.CompletedTask;
@@ -326,14 +345,17 @@ namespace CGZBot2.Handlers
 			}
 			else
 			{
-				ctx.RespondAsync("Участник уже нет в этом пати").TryDeleteAfter(8000);
+				ctx.RespondAsync("Участника нет в этом пати").TryDeleteAfter(8000);
 			}
 
 			return Task.CompletedTask;
 		}
 
 		[Command("join-party")]
-		public Task JoinMember(CommandContext ctx, string partyName, DiscordMember member)
+		[Description("Присоединяет участника к пати (только владелец)")]
+		public Task JoinMember(CommandContext ctx,
+			[Description("Название пати")] string partyName,
+			[Description("Участник")] DiscordMember member)
 		{
 			var party = GetPartyPrivate(ctx, partyName);
 			if (party == null) return Task.CompletedTask;
@@ -455,7 +477,7 @@ namespace CGZBot2.Handlers
 		private void StartedGameHandler(TeamGame game)
 		{
 			foreach (var member in game.TeamMembers)
-				member.CreateDmChannelAsync().Result.SendMessageAsync($"Игра в {game.GameName} от {game.Creator.Mention} началась.");
+				member.SendDicertMessage($"Игра в {game.GameName} от {game.Creator.Mention} началась.");
 
 			var overs = new DiscordOverwriteBuilder[] { new DiscordOverwriteBuilder(game.Creator).Allow(DSharpPlus.Permissions.All) };
 			game.CreatedVoice = game.Guild.CreateChannelAsync("Игра в " + game.GameName, DSharpPlus.ChannelType.Voice, voiceCreationCategory[game.Guild], overwrites: overs).Result;
@@ -491,29 +513,28 @@ namespace CGZBot2.Handlers
 		{
 			lock (game.MsgSyncRoot)
 			{
-				if (!game.IsWaitingForCreator)
+				var members = getEmoji(":ok_hand:");
+
+				bool l = game.IsWaitingForCreator;
+				if (members.Length >= game.TargetMembersCount)
 				{
-					var members = game.ReportMessage.GetReactionsAsync(DiscordEmoji.FromName(Program.Client, ":ok_hand:")).Result.Where(s => !s.IsBot);
-
-					bool tr = false;
-					if (members.Count() >= game.TargetMembersCount)
-					{
-						if (game.ReqAllInvited) { if (members.Intersect(game.Invited).SequenceEqual(game.Invited)) tr = true; }
-						else tr = true;
-					}
-
-					if (tr)
-					{
-						game.IsWaitingForCreator = true;
-						game.Creator.CreateDmChannelAsync().Result.SendMessageAsync($"Ваша игра в {game.GameName} готова к запуску");
-					}
-
-					return false;
+					if (game.ReqAllInvited) { if (members.Intersect(game.Invited).SequenceEqual(game.Invited)) game.IsWaitingForCreator = true; }
+					else game.IsWaitingForCreator = true;
 				}
-				else
+
+				if (!l && game.IsWaitingForCreator)
 				{
-					return game.ReportMessage.GetReactionsAsync(DiscordEmoji.FromName(Program.Client, ":arrow_forward:")).Result.Where(s => s == game.Creator).Any();
+					game.Creator.SendDicertMessage($"Ваша игра в {game.GameName} готова к запуску");
+					HandlerState.Set(typeof(GameHandler), nameof(startedGames), startedGames);
 				}
+
+				return getEmoji(":arrow_forward:").Any() && game.IsWaitingForCreator;
+			}
+
+			DiscordMember[] getEmoji(string name)
+			{
+				return game.ReportMessage.GetReactionsAsync(DiscordEmoji.FromName(Program.Client, ":ok_hand:")).Result
+					.Where(s => !s.IsBot).Select(s => game.Guild.GetMemberAsync(s.Id).Result).ToArray();
 			}
 		}
 	}

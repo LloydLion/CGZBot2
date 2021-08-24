@@ -132,8 +132,8 @@ namespace CGZBot2.Entities
 			{
 				do
 				{
-					if (state == GameState.Canceled) return;
 					Thread.Sleep(1000);
+					if (state == GameState.Canceled) return;
 				} while (!getPredicate()(this));
 
 				state = targetState;

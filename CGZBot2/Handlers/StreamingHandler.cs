@@ -18,7 +18,6 @@ namespace CGZBot2.Handlers
 
 
 		private readonly GuildDictionary<List<AnnouncedStream>> announcedStreams =
-			//new() { DefaultValueFactory = () => new List<AnnouncedStream>() };
 			HandlerState.Get(typeof(StreamingHandler), nameof(announcedStreams), () => new List<AnnouncedStream>());
 
 
@@ -107,7 +106,7 @@ namespace CGZBot2.Handlers
 			[Description("Название изменяймого стрима")] string streamName,
 			[Description("Имя изменяймого параметра\r\nДопустимые значения:\r\n" +
 				"name - название, startDate - дата начала, place - место провидения")] string paramName,
-			[Description("")] string newValue)
+			[Description("Новое значение параметра")] string newValue)
 		{
 			var streams = announcedStreams[ctx].Where(s => s.Creator == ctx.Member && s.Name == streamName).ToArray();
 
@@ -143,7 +142,7 @@ namespace CGZBot2.Handlers
 						case '$':
 							stream.PlaceType = AnnouncedStream.StreamingPlaceType.Internet; break;
 						default:
-							ctx.RespondAsync("Неожиданный токен в 1 символе параметра newValue\r\nИспользуйте /help edit-stream").TryDeleteAfter(8000);
+							ctx.RespondAsync("Неожиданный токен в 1 символе параметра newValue").TryDeleteAfter(8000);
 							return;
 					}
 
@@ -185,20 +184,19 @@ namespace CGZBot2.Handlers
 			var channel = announceChannel[guild];
 
 			var nonDel = announcedStreams[guild].Select(s => s.ReportMessage).ToList();
-			var dic = announcedStreams[guild].Where(s => s.ReportMessage != null).ToDictionary(s => s.ReportMessage);
 
 			var msgs = channel.GetMessagesAsync(1000).Result;
-			var toDel = msgs.Where(s => !nonDel.Contains(s) || dic[s].NeedReportUpdate);
+			var toDel = msgs.Where(s => !nonDel.Contains(s));
 			foreach (var msg in toDel) { msg.TryDelete(); Thread.Sleep(50); }
 
 			foreach (var stream in announcedStreams[guild])
 			{
-				if (!stream.NeedReportUpdate) continue;
-
-				var builder = new DiscordEmbedBuilder();
-
 				lock (stream.MsgSyncRoot)
 				{
+					if (!stream.NeedReportUpdate) continue;
+
+					stream.ReportMessage?.TryDelete();
+					var builder = new DiscordEmbedBuilder();
 
 					if (stream.State.HasFlag(AnnouncedStream.StreamState.Announced))
 						builder
@@ -260,8 +258,7 @@ namespace CGZBot2.Handlers
 
 		private void WaitingForStreamerHandler(AnnouncedStream stream)
 		{
-			var dmc = stream.Creator.CreateDmChannelAsync().Result;
-			dmc.SendMessageAsync($"Напоминание о трансляции \"{stream.Name}\", мы ждём только вас");
+			stream.Creator.SendDicertMessage($"Напоминание о трансляции \"{stream.Name}\", мы ждём только вас");
 
 			UpdateReports(stream.Guild);
 
@@ -277,7 +274,6 @@ namespace CGZBot2.Handlers
 		private void FinishedStreamHandler(AnnouncedStream stream)
 		{
 			announcedStreams[stream.Guild].Remove(stream);
-			lock (stream.MsgSyncRoot) stream.ReportMessage.TryDelete();
 			UpdateReports(stream.Guild);
 			HandlerState.Set(typeof(StreamingHandler), nameof(announcedStreams), announcedStreams);
 		}

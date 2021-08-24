@@ -34,10 +34,6 @@ namespace CGZBot2.Processors.Entities
 				invoker.Prepare(channel.Creator, builder, "creator/");
 			builder.Root.AddReference("creator", refer);
 
-			if (builder.AddObject(channel.ReportMessage, "message/", out col, out refer))
-				invoker.Prepare(channel.ReportMessage, builder, "message/");
-			builder.Root.AddReference("message", refer);
-
 			builder.ReturnNamespace();
 		}
 
@@ -52,13 +48,10 @@ namespace CGZBot2.Processors.Entities
 			var tmp = obj.GetEntryByRefInProp(root, "channel").Value;
 			var channel = (DiscordChannel)chprocessor.Restore(null, obj, invoker, tmp.Id);
 
-			tmp = obj.GetEntryByRefInProp(root, "message").Value;
-			var message = (DiscordMessage)msgprocessor.Restore(null, obj, invoker, tmp.Id);
-
 			tmp = obj.GetEntryByRefInProp(root, "creator").Value;
 			var creator = (DiscordMember)memprocessor.Restore(null, obj, invoker, tmp.Id);
 
-			var ret = new CreatedVoiceChannel(channel, creator) { ReportMessage = message };
+			var ret = new CreatedVoiceChannel(channel, creator);
 			return ret;
 		}
 	}

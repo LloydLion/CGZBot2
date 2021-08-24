@@ -1,4 +1,5 @@
-﻿using DSharpPlus.Entities;
+﻿using DSharpPlus;
+using DSharpPlus.Entities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -59,5 +60,10 @@ namespace CGZBot2
 		}
 
 		public static DateTime AddTo(this TimeSpan time, DateTime dateTime) => dateTime + time;
+
+		public static DiscordMessage SendDicertMessage(this DiscordMember user, string content)
+		{
+			return user.CreateDmChannelAsync().Result.SendMessageAsync(s => s.WithContent(content)).Result;
+		}
 	}
 }

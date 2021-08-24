@@ -29,11 +29,15 @@ namespace CGZBot2.Handlers
 		public VoiceHandler()
 		{
 			foreach (var d in createdVoices)
+			{
+				UpdateReports(d.Key);
+
 				foreach (var ch in d.Value)
 				{
 					ch.Deleted += ChannelDeleted;
 					ch.DeleteTask.Start();
 				}
+			}
 		}
 
 
@@ -49,10 +53,7 @@ namespace CGZBot2.Handlers
 			var count = createdVoices[ctx].Where(s => s.Creator == ctx.Member).Count();
 			if(count >= 2)
 			{
-				var msg = await ctx.RespondAsync("Вы превысили лимит. Участник может создать до 2 каналов");
-				await Task.Delay(8000);
-				try { await msg.DeleteAsync(); } catch (Exception) { }
-				try { await ctx.Message.DeleteAsync(); } catch (Exception) { }
+				ctx.RespondAsync("Вы превысили лимит. Участник может создать до 2 каналов").TryDeleteAfter(8000);
 				return;
 			}
 
@@ -99,7 +100,8 @@ namespace CGZBot2.Handlers
 
 		private void ChannelDeleted(CreatedVoiceChannel channel)
 		{
-			createdVoices[channel.Channel.Guild].Remove(channel); UpdateReports(channel.Channel.Guild);
+			createdVoices[channel.Channel.Guild].Remove(channel);
+			UpdateReports(channel.Channel.Guild);
 			HandlerState.Set(typeof(VoiceHandler), nameof(createdVoices), createdVoices);
 		}
 	}

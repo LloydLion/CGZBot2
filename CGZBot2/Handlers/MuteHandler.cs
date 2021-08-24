@@ -20,7 +20,6 @@ namespace CGZBot2.Handlers
 
 		private GuildDictionary<List<MemberMuteStatus>> mutes =
 			HandlerState.Get(typeof(MuteHandler), nameof(mutes), () => new List<MemberMuteStatus>());
-		//new() { DefaultValueFactory = () => new List<MemberMuteStatus>() };
 
 
 		public static event Action<MemberMuteStatus> MemberMuted;
@@ -42,7 +41,11 @@ namespace CGZBot2.Handlers
 
 
 		[Command("mute")]
-		public Task Mute(CommandContext ctx, DiscordMember member, TimeSpan time, string reason = "")
+		[Description("Мьютит участник")]
+		public Task Mute(CommandContext ctx,
+			[Description("Участник")] DiscordMember member,
+			[Description("Срок мута")] TimeSpan time,
+			[Description("Прачина мута")] string reason = "")
 		{
 			var mute = GetMute(member);
 			if(mute != null)
@@ -60,7 +63,10 @@ namespace CGZBot2.Handlers
 		}
 
 		[Command("mute")]
-		public Task Mute(CommandContext ctx, DiscordMember member, string reason = "")
+		[Description("Мьютит участник")]
+		public Task Mute(CommandContext ctx,
+			[Description("Участник")] DiscordMember member,
+			[Description("Прачина мута")] string reason = "")
 		{
 			var mute = GetMute(member);
 			if (mute != null)
@@ -78,7 +84,9 @@ namespace CGZBot2.Handlers
 		}
 
 		[Command("unmute")]
-		public Task Unmute(CommandContext ctx, DiscordMember member)
+		[Description("Размьючивает участник")]
+		public Task Unmute(CommandContext ctx,
+			[Description("Участник")] DiscordMember member)
 		{
 			var mute = GetMute(member, ctx);
 			if (mute == null) return Task.CompletedTask;
@@ -91,6 +99,7 @@ namespace CGZBot2.Handlers
 		}
 
 		[Command("setup-mute")]
+		[Description("Устанавливает права для роли мута (Запрет писать во всех каналах)")]
 		public Task SetupMuteRole(CommandContext ctx)
 		{
 			var role = mutedRole[ctx];

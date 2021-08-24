@@ -87,7 +87,9 @@ namespace CGZBot2.Handlers
 
 
 		[Command("reputation")]
-		public Task PrintReputaion(CommandContext ctx, DiscordMember member = null)
+		[Description("Показывает репутацию участника")]
+		public Task PrintReputaion(CommandContext ctx,
+			[Description("Участник (по умолчанию - вы)")] DiscordMember member = null)
 		{
 			if (member == null) member = ctx.Member;
 			var rp = GetReputation(member);
