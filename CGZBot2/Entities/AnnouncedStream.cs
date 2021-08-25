@@ -32,8 +32,8 @@ namespace CGZBot2.Entities
 			stateMachine.CreateTransit(new TaskTransitWorker<StreamState>(CreateTransitTask(() => StreamEndWait), true), StreamState.Running, StreamState.Finished);
 
 			stateMachine.OnStateChangedTo(m => { WaitingForStreamer?.Invoke(this); }, StreamState.WaitingForStreamer);
-			stateMachine.OnStateChangedTo(m => { Started?.Invoke(this); realStartDate = DateTime.Now; }, StreamState.Running);
-			stateMachine.OnStateChangedTo(m => { Finished?.Invoke(this); finishDate = DateTime.Now; }, StreamState.Finished);
+			stateMachine.OnStateChangedTo(m => { realStartDate = DateTime.Now; Started?.Invoke(this); }, StreamState.Running);
+			stateMachine.OnStateChangedTo(m => { finishDate = DateTime.Now; Finished?.Invoke(this); }, StreamState.Finished);
 			stateMachine.OnStateChangedTo(m => { Canceled?.Invoke(this); }, StreamState.Canceled);
 		}
 
