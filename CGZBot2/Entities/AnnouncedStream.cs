@@ -1,4 +1,5 @@
-﻿using DSharpPlus.Entities;
+﻿using CGZBot2.Tools;
+using DSharpPlus.Entities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,8 +13,9 @@ namespace CGZBot2.Entities
 	{
 		private DateTime? realStartDate;
 		private DateTime? finishDate;
-		private StreamState state = StreamState.Announced;
+		private StreamState startState = StreamState.Announced;
 		private bool requestedRpUpdate;
+		private StateMachine<StreamState> stateMachine = new();
 
 
 		public AnnouncedStream(string name, DiscordMember creator, DateTime startDate,
@@ -25,12 +27,14 @@ namespace CGZBot2.Entities
 			Place = place;
 			PlaceType = placeType;
 
-			StartWaitTask = CreateTransitTask(() => StartWait, StreamState.WaitingForStreamer);
-			StartWaitTask.ContinueWith(s => { if (state == StreamState.Canceled) return; WaitingForStreamer?.Invoke(this); StreamerWaitTask.Start(); });
-			StreamerWaitTask = CreateTransitTask(() => StreamerWait, StreamState.Running);
-			StreamerWaitTask.ContinueWith(s => { if (state == StreamState.Canceled) return; realStartDate = DateTime.Now; Started?.Invoke(this); StreamEndWaitTask.Start(); });
-			StreamEndWaitTask = CreateTransitTask(() => StreamEndWait, StreamState.Finished);
-			StreamEndWaitTask.ContinueWith(s => { if (state == StreamState.Canceled) return; finishDate = DateTime.Now; Finished?.Invoke(this); });
+			stateMachine.CreateTransit(new TaskTransitWorker<StreamState>(CreateTransitTask(() => StartWait), true), StreamState.Announced, StreamState.WaitingForStreamer);
+			stateMachine.CreateTransit(new TaskTransitWorker<StreamState>(CreateTransitTask(() => StreamerWait), true), StreamState.WaitingForStreamer, StreamState.Running);
+			stateMachine.CreateTransit(new TaskTransitWorker<StreamState>(CreateTransitTask(() => StreamEndWait), true), StreamState.Running, StreamState.Finished);
+
+			stateMachine.OnStateChangedTo(m => { WaitingForStreamer?.Invoke(this); }, StreamState.WaitingForStreamer);
+			stateMachine.OnStateChangedTo(m => { Started?.Invoke(this); realStartDate = DateTime.Now; }, StreamState.Running);
+			stateMachine.OnStateChangedTo(m => { Finished?.Invoke(this); finishDate = DateTime.Now; }, StreamState.Finished);
+			stateMachine.OnStateChangedTo(m => { Canceled?.Invoke(this); }, StreamState.Canceled);
 		}
 
 
@@ -45,19 +49,13 @@ namespace CGZBot2.Entities
 
 		public string Name { get; set; }
 
-		public object MsgSyncRoot { get; } = new object();
+		public object SyncRoot => stateMachine.SyncRoot;
 
 		public DiscordMember Creator { get; }
 
 		public DiscordMessage ReportMessage { get; set; }
 
 		public StreamState? ReportMessageType { get; set; }
-
-		public Task StartWaitTask { get; }
-
-		public Task StreamEndWaitTask { get; }
-
-		public Task StreamerWaitTask { get; }
 
 		public string Place { get; set; }
 
@@ -69,7 +67,7 @@ namespace CGZBot2.Entities
 
 		public Predicate<AnnouncedStream> StreamEndWait { get; set; }
 
-		public StreamState State { get => state; init => state = value; }
+		public StreamState State { get => stateMachine.CurrentState; init => startState = value; }
 
 		public DateTime CreationDate { get; init; } = DateTime.Now;
 
@@ -84,29 +82,10 @@ namespace CGZBot2.Entities
 		public DiscordGuild Guild => Creator.Guild;
 
 
-		public Task LaunchWaitTask()
-		{
-			switch (State)
-			{
-				case StreamState.Announced:
-					StartWaitTask.Start();
-					return StartWaitTask;
-				case StreamState.WaitingForStreamer:
-					StreamerWaitTask.Start();
-					return StreamerWaitTask;
-				case StreamState.Running:
-					StreamEndWaitTask.Start();
-					return StreamEndWaitTask;
-				case StreamState.Finished or StreamState.Canceled:
-					return null;
-				default: throw new Exception("ChZH, KAKOGO HRENA?");
-			}
-		}
-
 		public void Cancel()
 		{
-			state = StreamState.Canceled;
-			Canceled?.Invoke(this);
+			stateMachine.ChangeStateHard(StreamState.Canceled);
+			stateMachine.UpdateState();
 		}
 
 		public void RequestReportMessageUpdate()
@@ -117,6 +96,11 @@ namespace CGZBot2.Entities
 		public void ResetReportUpdate()
 		{
 			requestedRpUpdate = false;
+		}
+
+		public void Run()
+		{
+			stateMachine.Run(startState);
 		}
 
 
@@ -137,17 +121,18 @@ namespace CGZBot2.Entities
 		}
 
 
-		private Task CreateTransitTask(Func<Predicate<AnnouncedStream>> getPredicate, StreamState targetState)
+		private Func<Task> CreateTransitTask(Func<Predicate<AnnouncedStream>> getPredicate)
 		{
-			return new Task(() =>
+			return () => new Task(() =>
 			{
+				bool t;
+
 				do
 				{
-					if (state == StreamState.Canceled) return;
+					if (State == StreamState.Canceled) throw new Exception();
 					Thread.Sleep(1000);
-				} while (!getPredicate()(this));
-
-				state = targetState; 
+					try { t = !getPredicate()(this); } catch (Exception) { t = true; }
+				} while (t);
 			});
 		}
 	}

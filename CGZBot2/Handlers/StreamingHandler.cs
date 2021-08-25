@@ -28,21 +28,24 @@ namespace CGZBot2.Handlers
 		{
 			foreach (var l in announcedStreams)
 			{	
-				UpdateReports(l.Key);
-
 				foreach (var stream in l.Value)
 				{
-					stream.Started += StartedStreamHandler;
-					stream.WaitingForStreamer += WaitingForStreamerHandler;
-					stream.Finished += FinishedStreamHandler;
-					stream.Canceled += CanceledStreamHandler;
+					lock (stream.SyncRoot)
+					{
+						stream.Started += StartedStreamHandler;
+						stream.WaitingForStreamer += WaitingForStreamerHandler;
+						stream.Finished += FinishedStreamHandler;
+						stream.Canceled += CanceledStreamHandler;
 
-					stream.StartWait = StartWaitPredicate;
-					stream.StreamerWait = StreamerWaitPredicate;
-					stream.StreamEndWait = StreamEndPredicate;
+						stream.StartWait = StartWaitPredicate;
+						stream.StreamerWait = StreamerWaitPredicate;
+						stream.StreamEndWait = StreamEndPredicate;
 
-					stream.LaunchWaitTask();
+						stream.Run();
+					}
 				}
+
+				UpdateReports(l.Key);
 			}
 		}
 
@@ -81,21 +84,24 @@ namespace CGZBot2.Handlers
 
 			var stream = new AnnouncedStream(streamName, ctx.Member, date, place[1..], placeType);
 
-			stream.Started += StartedStreamHandler;
-			stream.WaitingForStreamer += WaitingForStreamerHandler;
-			stream.Finished += FinishedStreamHandler;
-			stream.Canceled += CanceledStreamHandler;
+			lock (stream.SyncRoot)
+			{
+				stream.Started += StartedStreamHandler;
+				stream.WaitingForStreamer += WaitingForStreamerHandler;
+				stream.Finished += FinishedStreamHandler;
+				stream.Canceled += CanceledStreamHandler;
 
-			stream.StartWait = StartWaitPredicate;
-			stream.StreamerWait = StreamerWaitPredicate;
-			stream.StreamEndWait = StreamEndPredicate;
+				stream.StartWait = StartWaitPredicate;
+				stream.StreamerWait = StreamerWaitPredicate;
+				stream.StreamEndWait = StreamEndPredicate;
 
-			StreamCreated?.Invoke(stream);
+				StreamCreated?.Invoke(stream);
 
-			announcedStreams[ctx].Add(stream);
-			UpdateReports(ctx.Guild);
+				stream.Run();
 
-			stream.StartWaitTask.Start();
+				announcedStreams[ctx].Add(stream);
+				UpdateReports(ctx.Guild);
+			}
 
 			return Task.CompletedTask;
 		}
@@ -181,54 +187,57 @@ namespace CGZBot2.Handlers
 
 		private void UpdateReports(DiscordGuild guild)
 		{
-			var channel = announceChannel[guild];
-
-			var nonDel = announcedStreams[guild].Select(s => s.ReportMessage).ToList();
-
-			var msgs = channel.GetMessagesAsync(1000).Result;
-			var toDel = msgs.Where(s => !nonDel.Contains(s));
-			foreach (var msg in toDel) { msg.TryDelete(); Thread.Sleep(50); }
-
-			foreach (var stream in announcedStreams[guild])
+			lock (guild)
 			{
-				lock (stream.MsgSyncRoot)
+				var channel = announceChannel[guild];
+
+				var nonDel = announcedStreams[guild].Select(s => s.ReportMessage).ToList();
+
+				var msgs = channel.GetMessagesAsync(1000).Result;
+				var toDel = msgs.Where(s => !nonDel.Contains(s));
+				foreach (var msg in toDel) { msg.TryDelete(); Thread.Sleep(50); }
+
+				foreach (var stream in announcedStreams[guild])
 				{
-					if (!stream.NeedReportUpdate) continue;
+					lock (stream.SyncRoot)
+					{
+						if (!stream.NeedReportUpdate) continue;
 
-					stream.ReportMessage?.TryDelete();
-					var builder = new DiscordEmbedBuilder();
+						stream.ReportMessage?.TryDelete();
+						var builder = new DiscordEmbedBuilder();
 
-					if (stream.State.HasFlag(AnnouncedStream.StreamState.Announced))
-						builder
-							.WithColor(DiscordColor.Cyan)
-							.WithTimestamp(stream.CreationDate)
-							.WithAuthor(stream.Creator.DisplayName, iconUrl: stream.Creator.AvatarUrl)
-							.WithTitle("Аннонс стрима")
-							.AddField("Название", stream.Name)
-							.AddField("Время провидения", stream.StartDate.ToString())
-							.AddField("Место", stream.PlaceType == AnnouncedStream.StreamingPlaceType.Discord ?
-								$"В дискорд канале; {stream.Place}" : stream.Place);
-					else if (stream.State == AnnouncedStream.StreamState.Running)
-						builder
-							.WithColor(DiscordColor.Blurple)
-							.WithTimestamp(stream.RealStartDate)
-							.WithAuthor(stream.Creator.DisplayName, iconUrl: stream.Creator.AvatarUrl)
-							.WithTitle("Стрим начат")
-							.AddField("Название", stream.Name)
-							.AddField("Время провидения", stream.StartDate.ToString())
-							.AddField("Место", stream.PlaceType == AnnouncedStream.StreamingPlaceType.Discord ?
-								$"В дискорд канале {stream.Place}" : stream.Place);
-					else continue;
+						if (stream.State.HasFlag(AnnouncedStream.StreamState.Announced))
+							builder
+								.WithColor(DiscordColor.Cyan)
+								.WithTimestamp(stream.CreationDate)
+								.WithAuthor(stream.Creator.DisplayName, iconUrl: stream.Creator.AvatarUrl)
+								.WithTitle("Аннонс стрима")
+								.AddField("Название", stream.Name)
+								.AddField("Время провидения", stream.StartDate.ToString())
+								.AddField("Место", stream.PlaceType == AnnouncedStream.StreamingPlaceType.Discord ?
+									$"В дискорд канале; {stream.Place}" : stream.Place);
+						else if (stream.State == AnnouncedStream.StreamState.Running)
+							builder
+								.WithColor(DiscordColor.Blurple)
+								.WithTimestamp(stream.RealStartDate)
+								.WithAuthor(stream.Creator.DisplayName, iconUrl: stream.Creator.AvatarUrl)
+								.WithTitle("Стрим начат")
+								.AddField("Название", stream.Name)
+								.AddField("Время провидения", stream.StartDate.ToString())
+								.AddField("Место", stream.PlaceType == AnnouncedStream.StreamingPlaceType.Discord ?
+									$"В дискорд канале {stream.Place}" : stream.Place);
+						else continue;
 
-					stream.ReportMessage = channel.SendMessageAsync(builder.Build()).Result;
+						stream.ReportMessage = channel.SendMessageAsync(builder.Build()).Result;
 
-					if (stream.State == AnnouncedStream.StreamState.Running)
-						stream.ReportMessage.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":x:"));
-					else if(stream.State == AnnouncedStream.StreamState.WaitingForStreamer)
-						stream.ReportMessage.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":arrow_forward:"));
+						if (stream.State == AnnouncedStream.StreamState.Running)
+							stream.ReportMessage.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":x:"));
+						else if (stream.State == AnnouncedStream.StreamState.WaitingForStreamer)
+							stream.ReportMessage.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":arrow_forward:"));
 
-					stream.ReportMessageType = stream.State;
-					stream.ResetReportUpdate();
+						stream.ReportMessageType = stream.State;
+						stream.ResetReportUpdate();
+					}
 				}
 			}
 		}
@@ -240,7 +249,7 @@ namespace CGZBot2.Handlers
 
 		private bool StreamerWaitPredicate(AnnouncedStream stream)
 		{
-			lock (stream.MsgSyncRoot)
+			lock (stream.SyncRoot)
 			{
 				return stream.ReportMessage.GetReactionsAsync(DiscordEmoji.FromName(Program.Client, ":arrow_forward:"))
 					.Result.Where(s => s == stream.Creator).Any();
@@ -249,7 +258,7 @@ namespace CGZBot2.Handlers
 
 		private bool StreamEndPredicate(AnnouncedStream stream)
 		{
-			lock (stream.MsgSyncRoot)
+			lock (stream.SyncRoot)
 			{
 				return stream.ReportMessage.GetReactionsAsync(DiscordEmoji.FromName(Program.Client, ":x:"))
 					.Result.Where(s => s == stream.Creator).Any();
