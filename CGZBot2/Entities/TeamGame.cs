@@ -1,4 +1,5 @@
-﻿using DSharpPlus.Entities;
+﻿using CGZBot2.Tools;
+using DSharpPlus.Entities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,7 +16,8 @@ namespace CGZBot2.Entities
 		private DateTime? startDate;
 		private DateTime? finishDate;
 		private bool requestedRpUpdate;
-		private GameState state = GameState.Created;
+		private GameState startState = GameState.Created;
+		private readonly StateMachine<GameState> stateMachine = new();
 
 
 		public TeamGame(DiscordMember creator, string name, string description, int membersCount)
@@ -25,12 +27,22 @@ namespace CGZBot2.Entities
 			Description = description;
 			TargetMembersCount = membersCount;
 
-			MembersWaitTask = CreateTransitTask(() => MembersWait, GameState.Running);
-			MembersWaitTask.ContinueWith(s => { if (State == GameState.Canceled) return; startDate = DateTime.Now; Started?.Invoke(this); GameEndWaitTask.Start(); });
-			GameEndWaitTask = CreateTransitTask(() => GameEndWait, GameState.Finished);
-			GameEndWaitTask.ContinueWith(s => { if (State == GameState.Canceled) return; finishDate = DateTime.Now; Finished?.Invoke(this); });
+			stateMachine.CreateTransit(new TaskTransitWorker<GameState>(CreateTransitTask(() => MembersWait), false), GameState.Created, GameState.WaitingForCreator);
+			stateMachine.CreateTransit(new TaskTransitWorker<GameState>(CreateTransitTask(() => (a) => !MembersWait(a)), false), GameState.WaitingForCreator, GameState.Created);
+			stateMachine.CreateTransit(new TaskTransitWorker<GameState>(CreateTransitTask(() => CreatorWait), true), GameState.WaitingForCreator, GameState.Running);
+			stateMachine.CreateTransit(new TaskTransitWorker<GameState>(CreateTransitTask(() => GameEndWait), true), GameState.Running, GameState.Finished);
+
+			stateMachine.OnStateChangedTo(m => { WaitingForMembers?.Invoke(this); }, GameState.Created);
+			stateMachine.OnStateChangedTo(m => { WaitingForCreator?.Invoke(this); }, GameState.WaitingForCreator);
+			stateMachine.OnStateChangedTo(m => { startDate = DateTime.Now; Started?.Invoke(this); }, GameState.Running);
+			stateMachine.OnStateChangedTo(m => { finishDate = DateTime.Now; Finished?.Invoke(this); }, GameState.Finished);
+			stateMachine.OnStateChangedTo(m => { Canceled?.Invoke(this); }, GameState.Canceled);
 		}
 
+
+		public event Action<TeamGame> WaitingForCreator;
+
+		public event Action<TeamGame> WaitingForMembers;
 
 		public event Action<TeamGame> Started;
 
@@ -43,15 +55,15 @@ namespace CGZBot2.Entities
 
 		public DiscordChannel CreatedVoice { get; set; }
 
-		public object MsgSyncRoot { get; } = new object();
+		public object SyncRoot => stateMachine.SyncRoot;
 
 		public DiscordMessage ReportMessage { get; set; }
 
 		public GameState? ReportMessageType { get; set; }
 
-		public bool ReqAllInvited { get; set; }
+		public IStateMachineReporter<GameState> StateMachine => stateMachine;
 
-		public bool IsWaitingForCreator { get; set; }
+		public bool ReqAllInvited { get; set; }
 
 		public ICollection<DiscordMember> TeamMembers { get => members; init => ((IReadOnlyCollection<DiscordMember>)value).CopyTo(members); }
 
@@ -63,17 +75,15 @@ namespace CGZBot2.Entities
 
 		public ICollection<DiscordMember> Invited { get => invited; set { invited.Clear(); ((IReadOnlyCollection<DiscordMember>)value).CopyTo(invited); } }
 
-		public Task MembersWaitTask { get; }
-
-		public Task GameEndWaitTask { get; }
-
 		public Predicate<TeamGame> MembersWait { get; set; }
+
+		public Predicate<TeamGame> CreatorWait { get; set; }
 
 		public Predicate<TeamGame> GameEndWait { get; set; }
 
 		public bool NeedReportUpdate => State != ReportMessageType || requestedRpUpdate;
 
-		public GameState State { get => state; init => state = value; }
+		public GameState State { get => stateMachine.CurrentState; init => startState = value; }
 
 		public DateTime CreationDate { get; init; } = DateTime.Now;
 
@@ -87,10 +97,11 @@ namespace CGZBot2.Entities
 		[Flags]
 		public enum GameState
 		{
-			Created = 0b1000,
-			Running = 0b0100,
-			Finished = 0b0010,
-			Canceled = 0b0011
+			Created = 0b10000,
+			WaitingForCreator = 0b11000,
+			Running = 0b00100,
+			Finished = 0b00010,
+			Canceled = 0b00011
 		}
 
 
@@ -106,37 +117,26 @@ namespace CGZBot2.Entities
 
 		public void Cancel()
 		{
-			state = GameState.Canceled;
-			Canceled?.Invoke(this);
+			stateMachine.ChangeStateHard(GameState.Canceled);
 		}
 
-		public Task LaunchWaitTask()
+		public void Run()
 		{
-			switch (State)
-			{
-				case GameState.Created:
-					MembersWaitTask.Start();
-					return MembersWaitTask;
-				case GameState.Running:
-					GameEndWaitTask.Start();
-					return GameEndWaitTask;
-				case GameState.Finished or GameState.Canceled:
-					return null;
-				default: throw new Exception("ChZH, KAKOGO HRENA?");
-			}
+			stateMachine.Run(startState);
 		}
 
-		private Task CreateTransitTask(Func<Predicate<TeamGame>> getPredicate, GameState targetState)
+		private Func<Task> CreateTransitTask(Func<Predicate<TeamGame>> getPredicate)
 		{
-			return new Task(() =>
+			return () => new Task(() =>
 			{
+				bool t;
+
 				do
 				{
+					if (State == GameState.Canceled) throw new Exception();
 					Thread.Sleep(1000);
-					if (state == GameState.Canceled) return;
-				} while (!getPredicate()(this));
-
-				state = targetState;
+					try { t = !getPredicate()(this); } catch (Exception) { t = true; }
+				} while (t);
 			});
 		}
 	}

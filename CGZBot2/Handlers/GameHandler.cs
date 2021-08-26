@@ -1,4 +1,5 @@
 ﻿using CGZBot2.Entities;
+using CGZBot2.Tools;
 using DSharpPlus.CommandsNext;
 using DSharpPlus.CommandsNext.Attributes;
 using DSharpPlus.Entities;
@@ -34,19 +35,26 @@ namespace CGZBot2.Handlers
 		{
 			foreach (var l in startedGames)
 			{
-				UpdateReports(l.Key);
-
 				foreach (var game in l.Value)
 				{
-					game.Started += StartedGameHandler;
-					game.Finished += FinishedGameHandler;
-					game.Canceled += CanceledGameHandler;
+					lock(game.SyncRoot)
+					{
+						game.Started += StartedGameHandler;
+						game.Finished += FinishedGameHandler;
+						game.Canceled += CanceledGameHandler;
+						game.WaitingForMembers += WaitingForMembersGameHandler;
+						game.WaitingForCreator += WaitingForCreatorGameHandler;
+						game.StateMachine.StateChanged += (a) => GameStateChangedHandler(game);
 
-					game.MembersWait = MembersWaitPredicate;
-					game.GameEndWait = EndWaitPredicate;
+						game.MembersWait = MembersWaitPredicate;
+						game.GameEndWait = EndWaitPredicate;
+						game.CreatorWait = CreatorWaitPredicate;
 
-					game.LaunchWaitTask();
+						game.Run();
+					}
 				}
+
+				UpdateReports(l.Key);
 			}
 		}
 
@@ -79,19 +87,27 @@ namespace CGZBot2.Handlers
 
 			var game = new TeamGame(ctx.Member, name, description, targetMemberCount) { Invited = invites, ReqAllInvited = reqAllInvited };
 
-			game.MembersWait = MembersWaitPredicate;
-			game.GameEndWait = EndWaitPredicate;
+			lock (game.SyncRoot)
+			{
+				game.MembersWait = MembersWaitPredicate;
+				game.GameEndWait = EndWaitPredicate;
+				game.CreatorWait = CreatorWaitPredicate;
 
-			game.Started += StartedGameHandler;
-			game.Finished += FinishedGameHandler;
-			game.Canceled += CanceledGameHandler;
+				game.Started += StartedGameHandler;
+				game.Finished += FinishedGameHandler;
+				game.Canceled += CanceledGameHandler;
+				game.WaitingForMembers += WaitingForMembersGameHandler;
+				game.WaitingForCreator += WaitingForCreatorGameHandler;
+				game.StateMachine.StateChanged += (a) => GameStateChangedHandler(game);
 
-			GameCreated?.Invoke(game);
+				game.Run();
 
-			startedGames[ctx].Add(game);
-			UpdateReports(ctx.Guild);
+				GameCreated?.Invoke(game);
 
-			game.MembersWaitTask.Start();
+				startedGames[ctx].Add(game);
+				UpdateReports(ctx.Guild);
+
+			}
 
 			return Task.CompletedTask;
 		}
@@ -105,6 +121,7 @@ namespace CGZBot2.Handlers
 			if (game == null) return Task.CompletedTask;
 
 			game.Cancel();
+
 			startedGames[ctx].Remove(game);
 			ctx.RespondAsync("Игра успешно отменёна").TryDeleteAfter(8000);
 
@@ -197,7 +214,7 @@ namespace CGZBot2.Handlers
 
 			foreach (var member in game.Invited)
 			{
-				member.SendDicertMessage($"Вы были приглашены на игру в {game.GameName} на сервере {game.Guild.Name} от {game.Creator.Mention}");
+				member.SendDicertMessage($"Вы были приглашены на игру в {game.GameName} на сервере {game.Guild.Name} от {game.Creator.Mention}\r\n" + game.ReportMessage.JumpLink);
 			}
 
 			return Task.CompletedTask;
@@ -417,125 +434,145 @@ namespace CGZBot2.Handlers
 
 		private void UpdateReports(DiscordGuild guild)
 		{
-			var channel = reportChannel[guild];
-
-			var nonDel = startedGames[guild].Select(s => s.ReportMessage).ToList();
-			var dic = startedGames[guild].Where(s => s.ReportMessage != null).ToDictionary(s => s.ReportMessage);
-
-			var msgs = channel.GetMessagesAsync(1000).Result;
-			var toDel = msgs.Where(s => !nonDel.Contains(s));
-			foreach (var msg in toDel) { msg.TryDelete(); Thread.Sleep(50); }
-
-			foreach (var game in startedGames[guild])
+			lock (guild)
 			{
-				if (!game.NeedReportUpdate) continue;
 
-				lock(game.MsgSyncRoot)
+				var channel = reportChannel[guild];
+
+				var nonDel = startedGames[guild].Select(s => s.ReportMessage).ToList();
+				var dic = startedGames[guild].Where(s => s.ReportMessage != null).ToDictionary(s => s.ReportMessage);
+
+				var msgs = channel.GetMessagesAsync(1000).Result;
+				var toDel = msgs.Where(s => !nonDel.Contains(s));
+				foreach (var msg in toDel) { msg.TryDelete(); Thread.Sleep(50); }
+
+				foreach (var game in startedGames[guild])
 				{
-					game.ReportMessage?.DeleteAsync().Wait();
-					var builder = new DiscordEmbedBuilder();
+					if (!game.NeedReportUpdate) continue;
 
-					if (game.State == TeamGame.GameState.Created)
+					lock (game.SyncRoot)
 					{
-						var invStr = string.Join(", ", game.Invited.Select(s => s.Mention));
-						if (string.IsNullOrWhiteSpace(invStr)) invStr = "--";
+						var builder = new DiscordEmbedBuilder();
 
-						builder
-							.WithColor(DiscordColor.DarkRed)
-							.WithAuthor(game.Creator.DisplayName, game.Creator.AvatarUrl)
-							.WithTitle("Игра в " + game.GameName)
-							.AddField("Приглашены", invStr)
-							.AddField("Запуск при", "присоединении " + game.TargetMembersCount + " участников" + (game.ReqAllInvited ? " и всех приглашённых" : ""))
-							.WithTimestamp(game.CreationDate);
-						if (!string.IsNullOrWhiteSpace(game.Description)) builder.AddField("Описание", game.Description);
+						if (game.State == TeamGame.GameState.Created)
+						{
+							var invStr = string.Join(", ", game.Invited.Select(s => s.Mention));
+							if (string.IsNullOrWhiteSpace(invStr)) invStr = "--";
+
+							builder
+								.WithColor(DiscordColor.DarkRed)
+								.WithAuthor(game.Creator.DisplayName, game.Creator.AvatarUrl)
+								.WithTitle("Игра в " + game.GameName)
+								.AddField("Приглашены", invStr)
+								.AddField("Запуск при", "присоединении " + game.TargetMembersCount + " участников" + (game.ReqAllInvited ? " и всех приглашённых" : ""))
+								.WithTimestamp(game.CreationDate);
+							if (!string.IsNullOrWhiteSpace(game.Description)) builder.AddField("Описание", game.Description);
+						}
+						else if (game.State == TeamGame.GameState.Running)
+							builder
+								.WithColor(DiscordColor.HotPink)
+								.WithAuthor(game.Creator.DisplayName, game.Creator.AvatarUrl)
+								.WithTitle("Игра в " + game.GameName + " начата")
+								.AddField("Участники", string.Join(", ", game.TeamMembers.Select(s => s.Mention)))
+								.WithTimestamp(game.StartDate);
+						else continue;
+
+						if (game.ReportMessage == null)
+							game.ReportMessage = channel.SendMessageAsync(builder.Build()).Result;
+						else
+							game.ReportMessage = game.ReportMessage.ModifyAsync(builder.Build()).Result;
+
+						if (game.State.HasFlag(TeamGame.GameState.Created))
+						{
+							game.ReportMessage.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":ok_hand:"));
+							game.ReportMessage.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":arrow_forward:"));
+						}
+						else if (game.State == TeamGame.GameState.Running)
+							game.ReportMessage.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":x:"));
+
+						game.ReportMessageType = game.State;
+						game.ResetReportUpdate();
 					}
-					else if (game.State == TeamGame.GameState.Running)
-						builder
-							.WithColor(DiscordColor.HotPink)
-							.WithAuthor(game.Creator.DisplayName, game.Creator.AvatarUrl)
-							.WithTitle("Игра в " + game.GameName + " начата")
-							.AddField("Участники", string.Join(", ", game.TeamMembers.Select(s => s.Mention)))
-							.WithTimestamp(game.StartDate);
-					else continue;
-
-					game.ReportMessage = channel.SendMessageAsync(builder.Build()).Result;
-
-					if (game.State == TeamGame.GameState.Created)
-					{
-						game.ReportMessage.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":ok_hand:"));
-						game.ReportMessage.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":arrow_forward:"));
-					}
-					else if (game.State == TeamGame.GameState.Running)
-						game.ReportMessage.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":x:"));
-
-					game.ReportMessageType = game.State;
-					game.ResetReportUpdate();
 				}
 			}
 		}
 
+		private void GameStateChangedHandler(TeamGame game)
+		{
+			UpdateReports(game.Guild);
+			HandlerState.Set(typeof(GameHandler), nameof(startedGames), startedGames);
+		}
+
 		private void StartedGameHandler(TeamGame game)
 		{
+			var members = GetEmoji(game, ":ok_hand:");
+			game.TeamMembers.AddRange(members);
+
 			foreach (var member in game.TeamMembers)
 				member.SendDicertMessage($"Игра в {game.GameName} от {game.Creator.Mention} началась.");
 
 			var overs = new DiscordOverwriteBuilder[] { new DiscordOverwriteBuilder(game.Creator).Allow(DSharpPlus.Permissions.All) };
-			game.CreatedVoice = game.Guild.CreateChannelAsync("Игра в " + game.GameName, DSharpPlus.ChannelType.Voice, voiceCreationCategory[game.Guild], overwrites: overs).Result;
+			game.CreatedVoice = game.Guild.CreateChannelAsync("Игра в " + game.GameName, DSharpPlus.ChannelType.Voice,
+				voiceCreationCategory[game.Guild], overwrites: overs).Result;
+		}
 
-			var members = game.ReportMessage.GetReactionsAsync(DiscordEmoji.FromName(Program.Client, ":ok_hand:")).Result.Where(s => !s.IsBot);
-			game.TeamMembers.AddRange(members.Select(s => game.Guild.GetMemberAsync(s.Id).Result).ToList());
+		private void WaitingForCreatorGameHandler(TeamGame game)
+		{
+			game.Creator.SendDicertMessage($"Ваша игра в {game.GameName} готова к запуску.");
+		}
 
-			UpdateReports(game.Guild);
+		private void WaitingForMembersGameHandler(TeamGame game)
+		{
+			game.Creator.SendDicertMessage($"Ваша игра в {game.GameName} более не готова к запуску - участник вышел из игры.");
 		}
 
 		private void FinishedGameHandler(TeamGame game)
 		{
 			game.CreatedVoice.DeleteAsync();
 			startedGames[game.Guild].Remove(game);
-			UpdateReports(game.Guild);
 		}
 
 		private void CanceledGameHandler(TeamGame game)
 		{
 			startedGames[game.Guild].Remove(game);
-			UpdateReports(game.Guild);
 		}
 
 		private bool EndWaitPredicate(TeamGame game)
 		{
-			lock(game.MsgSyncRoot)
+			lock(game.SyncRoot)
 			{
-				return game.ReportMessage.GetReactionsAsync(DiscordEmoji.FromName(Program.Client, ":x:")).Result.Where(s => s == game.Creator).Any();
+				return GetEmoji(game, ":x:").Where(s => s == game.Creator).Any();
 			}
 		}
 
 		private bool MembersWaitPredicate(TeamGame game)
 		{
-			lock (game.MsgSyncRoot)
+			lock (game.SyncRoot)
 			{
-				var members = getEmoji(":ok_hand:");
+				var members = GetEmoji(game, ":ok_hand:");
 
-				bool l = game.IsWaitingForCreator;
 				if (members.Length >= game.TargetMembersCount)
 				{
-					if (game.ReqAllInvited) { if (members.Intersect(game.Invited).SequenceEqual(game.Invited)) game.IsWaitingForCreator = true; }
-					else game.IsWaitingForCreator = true;
+					if (game.ReqAllInvited) { if (members.Intersect(game.Invited).SequenceEqual(game.Invited)) return true; }
+					else return true;
 				}
 
-				if (!l && game.IsWaitingForCreator)
-				{
-					game.Creator.SendDicertMessage($"Ваша игра в {game.GameName} готова к запуску");
-					HandlerState.Set(typeof(GameHandler), nameof(startedGames), startedGames);
-				}
-
-				return getEmoji(":arrow_forward:").Any() && game.IsWaitingForCreator;
+				return false;
 			}
+		}
 
-			DiscordMember[] getEmoji(string name)
+		private bool CreatorWaitPredicate(TeamGame game)
+		{
+			lock(game.SyncRoot)
 			{
-				return game.ReportMessage.GetReactionsAsync(DiscordEmoji.FromName(Program.Client, ":ok_hand:")).Result
-					.Where(s => !s.IsBot).Select(s => game.Guild.GetMemberAsync(s.Id).Result).ToArray();
+				return GetEmoji(game, ":arrow_forward:").Any(s => s == game.Creator);
 			}
+		}
+
+		private DiscordMember[] GetEmoji(TeamGame game, string name)
+		{
+			return game.ReportMessage.GetReactionsAsync(DiscordEmoji.FromName(Program.Client, name)).Result
+				.Where(s => !s.IsBot).Select(s => game.Guild.GetMemberAsync(s.Id).Result).ToArray();
 		}
 	}
 }

@@ -95,9 +95,9 @@ namespace CGZBot2.Handlers
 				stream.StreamerWait = StreamerWaitPredicate;
 				stream.StreamEndWait = StreamEndPredicate;
 
-				StreamCreated?.Invoke(stream);
-
 				stream.Run();
+
+				StreamCreated?.Invoke(stream);
 
 				announcedStreams[ctx].Add(stream);
 				UpdateReports(ctx.Guild);

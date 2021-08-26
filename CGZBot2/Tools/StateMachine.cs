@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace CGZBot2.Tools
 {
-	class StateMachine<TState> : IDisposable where TState : Enum
+	class StateMachine<TState> : IDisposable, IStateMachineReporter<TState> where TState : Enum
 	{
 		private TState currentState;
 		private TState hardSetState;
@@ -44,6 +44,9 @@ namespace CGZBot2.Tools
 
 		public event Action<StateMachine<TState>> StateChanged;
 
+		event Action<IStateMachineReporter<TState>> IStateMachineReporter<TState>.StateChanged 
+			{ add { StateChanged += new Action<StateMachine<TState>>(value); } remove { StateChanged -= new Action<StateMachine<TState>>(value); } }
+
 
 		public void ChangeStateHard(TState newState)
 		{
@@ -68,6 +71,8 @@ namespace CGZBot2.Tools
 			StateChanged += (m) => { if (m.CurrentState.Equals(targetState)) handler(m); };
 		}
 
+		void IStateMachineReporter<TState>.OnStateChangedTo(Action<IStateMachineReporter<TState>> handler, TState targetState) => OnStateChangedTo(handler, targetState);
+
 		public void CreateTransit(ITransitWorker<TState> worker, TState origin, TState target)
 		{
 			transits.Add(origin, new StateTransit() { Worker = worker, OriginState = origin, TargetState = target });
@@ -90,7 +95,8 @@ namespace CGZBot2.Tools
 		{
 			if(!hardSetState.Equals(currentState))
 			{
-				transitRecords.Add(new StateTransitRecord() { Transit = null, LocalTime = DateTime.Now, OriginState = currentState, TargetState = hardSetState });
+				transitRecords.Add(new StateTransitRecord()
+					{ Transit = null, LocalTime = DateTime.Now, OriginState = currentState, TargetState = hardSetState });
 				currentState = hardSetState;
 				StateChanged?.Invoke(this);
 			}
@@ -100,9 +106,10 @@ namespace CGZBot2.Tools
 			{
 				if(tran.Worker.ReadyToTransit)
 				{
-					transitRecords.Add(new StateTransitRecord() { Transit = tran, LocalTime = DateTime.Now, OriginState = tran.OriginState, TargetState = tran.TargetState });
+					transitRecords.Add(new StateTransitRecord()
+						{ Transit = tran, LocalTime = DateTime.Now, OriginState = tran.OriginState, TargetState = tran.TargetState });
 					hardSetState = currentState = tran.TargetState;
-					tran.Worker.Reset();
+					foreach (var u in trans) u.Worker.Reset();
 					StateChanged?.Invoke(this);
 					UpdateStateDirect();
 					return;
@@ -144,6 +151,15 @@ namespace CGZBot2.Tools
 		void Reset();
 
 		void Start(StateMachine<TState>.StateTransit transit, StateMachine<TState> machine);
+	}
+
+	interface IStateMachineReporter<TState> : IDisposable where TState : Enum
+	{
+		TState CurrentState { get; }
+
+		event Action<IStateMachineReporter<TState>> StateChanged;
+
+		void OnStateChangedTo(Action<IStateMachineReporter<TState>> handler, TState targetState);
 	}
 
 	class TaskTransitWorker<TState> : ITransitWorker<TState> where TState : Enum

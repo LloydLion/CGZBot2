@@ -46,6 +46,7 @@ namespace CGZBot2.Processors.Entities
 				invoker.Prepare(list, builder, "invited/");
 			builder.Root.AddReference("invited", refer);
 
+			builder.Root.AddString("state", game.State.ToString());
 			builder.Root.AddNumber("create date", game.CreationDate.Ticks);
 			builder.Root.AddNumber("start date", game.StartDate?.Ticks ?? -1);
 			builder.Root.AddNumber("end date", game.FinishDate?.Ticks ?? -1);
@@ -67,11 +68,14 @@ namespace CGZBot2.Processors.Entities
 			if (voiceRef == null) voice = null;
 			else voice = invoker.Restore<DiscordChannel>(null, typeof(DiscordChannel), obj, voiceRef);
 
+			var state = (TeamGame.GameState)Enum.Parse
+				(typeof(TeamGame.GameState), (string)root.ReadPrimitive("state"));
+
 			var createDate = new DateTime((long)root.ReadPrimitive("create date"));
 			var startDateTicks = (long)root.ReadPrimitive("start date");
 			var finishDateTicks = (long)root.ReadPrimitive("end date");
 
-			var game = new TeamGame(creator, null, null, 0) { Invited = invited, TeamMembers = members,
+			var game = new TeamGame(creator, null, null, 0) { Invited = invited, TeamMembers = members, State = state,
 				CreationDate = createDate, StartDate = startDateTicks == -1 ? null : new DateTime(startDateTicks),
 				FinishDate = finishDateTicks == -1 ? null : new DateTime(finishDateTicks), CreatedVoice = voice
 			};
