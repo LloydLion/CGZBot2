@@ -116,7 +116,7 @@ namespace CGZBot2.Handlers
 
 		[HelpUseLimits(CommandUseLimit.Private)]
 		[Command("cancel-game")]
-		[Description("Отменяет игру")]
+		[Description("Отменяет игру (Только создатель)")]
 		public Task CancelGame(CommandContext ctx,
 			[Description("Имя отменяймой игры")] string name)
 		{
@@ -133,7 +133,7 @@ namespace CGZBot2.Handlers
 
 		[HelpUseLimits(CommandUseLimit.Private)]
 		[Command("edit-game")]
-		[Description("Изменяет параметр игры")]
+		[Description("Изменяет параметр игры (Только создатель)")]
 		public async Task EditGame(CommandContext ctx,
 			[Description("Название изменяймой игры")] string name,
 			[Description("Имя изменяймого параметра\r\nДопустимые значения:\r\n" +
@@ -181,7 +181,7 @@ namespace CGZBot2.Handlers
 
 		[HelpUseLimits(CommandUseLimit.Private)]
 		[Command("clear-game-invs")]
-		[Description("Отменяет все приглашения у указаной игры")]
+		[Description("Отменяет все приглашения у указаной игры (Только создатель)")]
 		public Task ChangeInvited(CommandContext ctx,
 			[Description("Название игры")] string name)
 		{
@@ -212,7 +212,7 @@ namespace CGZBot2.Handlers
 
 		[HelpUseLimits(CommandUseLimit.Private)]
 		[Command("send-game-invs")]
-		[Description("Оправляет приглашения всем приглашённым участником в игре")]
+		[Description("Оправляет приглашения всем приглашённым участником в игре (Только создатель)")]
 		public Task SendInvites(CommandContext ctx,
 			[Description("Название игры")] string gameName)
 		{
@@ -229,7 +229,7 @@ namespace CGZBot2.Handlers
 
 		[HelpUseLimits(CommandUseLimit.Private)]
 		[Command("invite-party")]
-		[Description("Приглашает всех участников пати в игру")]
+		[Description("Приглашает всех участников пати в игру (Только создатель)")]
 		public Task AddPatryToInvited(CommandContext ctx,
 			[Description("Название игры")] string gameName,
 			[Description("Название игры")] string partyName)

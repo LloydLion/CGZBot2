@@ -44,7 +44,7 @@ namespace CGZBot2.Handlers
 
 		[HelpUseLimits(CommandUseLimit.Admins)]
 		[Command("mute")]
-		[Description("Мьютит участник")]
+		[Description("Мьютит участника (Только админ)")]
 		public Task Mute(CommandContext ctx,
 			[Description("Участник")] DiscordMember member,
 			[Description("Срок мута")] TimeSpan time,
@@ -73,7 +73,7 @@ namespace CGZBot2.Handlers
 
 		//[HelpUseLimits(CommandUseLimit.Admins)] //see overload
 		[Command("mute")]
-		[Description("Мьютит участник")]
+		//[Description("Мьютит участника")]
 		public Task Mute(CommandContext ctx,
 			[Description("Участник")] DiscordMember member,
 			[Description("Прачина мута")] string reason = "")
@@ -101,7 +101,7 @@ namespace CGZBot2.Handlers
 
 		[HelpUseLimits(CommandUseLimit.Admins)]
 		[Command("unmute")]
-		[Description("Размьючивает участник")]
+		[Description("Размьючивает участника (Только админ)")]
 		public Task Unmute(CommandContext ctx,
 			[Description("Участник")] DiscordMember member)
 		{
@@ -123,7 +123,7 @@ namespace CGZBot2.Handlers
 
 		[HelpUseLimits(CommandUseLimit.Admins)]
 		[Command("setup-mute")]
-		[Description("Устанавливает права для роли мута (Запрет писать во всех каналах)")]
+		[Description("Устанавливает права для роли мута (Запрет писать во всех каналах) (Только админ)")]
 		public Task SetupMuteRole(CommandContext ctx)
 		{
 			if (!ctx.Member.PermissionsIn(ctx.Channel).HasPermission(Permissions.ManageGuild))
