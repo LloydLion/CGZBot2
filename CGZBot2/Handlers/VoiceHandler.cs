@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 
 namespace CGZBot2.Handlers
 {
+	[Description("Голосовые каналы")]
 	class VoiceHandler : BaseCommandModule
 	{
 		private static readonly GuildDictionary<DiscordChannel> voiceCreationCategory =

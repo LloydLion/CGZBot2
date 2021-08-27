@@ -1,4 +1,5 @@
-﻿using CGZBot2.Entities;
+﻿using CGZBot2.Attributes;
+using CGZBot2.Entities;
 using DSharpPlus;
 using DSharpPlus.CommandsNext;
 using DSharpPlus.CommandsNext.Attributes;
@@ -11,6 +12,7 @@ using System.Threading.Tasks;
 
 namespace CGZBot2.Handlers
 {
+	[Description("Мут")]
 	class MuteHandler : BaseCommandModule
 	{
 		private static GuildDictionary<DiscordChannel> reportChannel =
@@ -40,6 +42,7 @@ namespace CGZBot2.Handlers
 		}
 
 
+		[HelpUseLimits(CommandUseLimit.Admins)]
 		[Command("mute")]
 		[Description("Мьютит участник")]
 		public Task Mute(CommandContext ctx,
@@ -47,6 +50,12 @@ namespace CGZBot2.Handlers
 			[Description("Срок мута")] TimeSpan time,
 			[Description("Прачина мута")] string reason = "")
 		{
+			if (!ctx.Member.PermissionsIn(ctx.Channel).HasPermission(Permissions.KickMembers))
+			{
+				ctx.RespondAsync("У вас не достаточно прав для этой операции (Выгонять участников)").TryDeleteAfter(8000);
+				return Task.CompletedTask;
+			}
+
 			var mute = GetMute(member);
 			if(mute != null)
 			{
@@ -62,12 +71,19 @@ namespace CGZBot2.Handlers
 			return Task.CompletedTask;
 		}
 
+		//[HelpUseLimits(CommandUseLimit.Admins)] //see overload
 		[Command("mute")]
 		[Description("Мьютит участник")]
 		public Task Mute(CommandContext ctx,
 			[Description("Участник")] DiscordMember member,
 			[Description("Прачина мута")] string reason = "")
 		{
+			if (!ctx.Member.PermissionsIn(ctx.Channel).HasPermission(Permissions.KickMembers))
+			{
+				ctx.RespondAsync("У вас не достаточно прав для этой операции (Выгонять участников)").TryDeleteAfter(8000);
+				return Task.CompletedTask;
+			}
+
 			var mute = GetMute(member);
 			if (mute != null)
 			{
@@ -83,11 +99,18 @@ namespace CGZBot2.Handlers
 			return Task.CompletedTask;
 		}
 
+		[HelpUseLimits(CommandUseLimit.Admins)]
 		[Command("unmute")]
 		[Description("Размьючивает участник")]
 		public Task Unmute(CommandContext ctx,
 			[Description("Участник")] DiscordMember member)
 		{
+			if (!ctx.Member.PermissionsIn(ctx.Channel).HasPermission(Permissions.KickMembers))
+			{
+				ctx.RespondAsync("У вас не достаточно прав для этой операции (Выгонять участников)").TryDeleteAfter(8000);
+				return Task.CompletedTask;
+			}
+
 			var mute = GetMute(member, ctx);
 			if (mute == null) return Task.CompletedTask;
 
@@ -98,10 +121,17 @@ namespace CGZBot2.Handlers
 			return Task.CompletedTask;
 		}
 
+		[HelpUseLimits(CommandUseLimit.Admins)]
 		[Command("setup-mute")]
 		[Description("Устанавливает права для роли мута (Запрет писать во всех каналах)")]
 		public Task SetupMuteRole(CommandContext ctx)
 		{
+			if (!ctx.Member.PermissionsIn(ctx.Channel).HasPermission(Permissions.ManageGuild))
+			{
+				ctx.RespondAsync("У вас не достаточно прав для этой операции (Управление сервером)").TryDeleteAfter(8000);
+				return Task.CompletedTask;
+			}
+
 			var role = mutedRole[ctx];
 
 			var channels = ctx.Guild.GetChannelsAsync().Result;

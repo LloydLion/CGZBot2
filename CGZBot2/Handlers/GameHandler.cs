@@ -1,4 +1,5 @@
-﻿using CGZBot2.Entities;
+﻿using CGZBot2.Attributes;
+using CGZBot2.Entities;
 using CGZBot2.Tools;
 using DSharpPlus.CommandsNext;
 using DSharpPlus.CommandsNext.Attributes;
@@ -12,6 +13,7 @@ using System.Threading.Tasks;
 
 namespace CGZBot2.Handlers
 {
+	[Description("Коммандные игры и пати")]
 	class GameHandler : BaseCommandModule
 	{
 		private static readonly GuildDictionary<DiscordChannel> reportChannel =
@@ -112,6 +114,7 @@ namespace CGZBot2.Handlers
 			return Task.CompletedTask;
 		}
 
+		[HelpUseLimits(CommandUseLimit.Private)]
 		[Command("cancel-game")]
 		[Description("Отменяет игру")]
 		public Task CancelGame(CommandContext ctx,
@@ -128,6 +131,7 @@ namespace CGZBot2.Handlers
 			return Task.CompletedTask;
 		}
 
+		[HelpUseLimits(CommandUseLimit.Private)]
 		[Command("edit-game")]
 		[Description("Изменяет параметр игры")]
 		public async Task EditGame(CommandContext ctx,
@@ -175,6 +179,7 @@ namespace CGZBot2.Handlers
 			UpdateReports(ctx.Guild);
 		}
 
+		[HelpUseLimits(CommandUseLimit.Private)]
 		[Command("clear-game-invs")]
 		[Description("Отменяет все приглашения у указаной игры")]
 		public Task ChangeInvited(CommandContext ctx,
@@ -189,6 +194,7 @@ namespace CGZBot2.Handlers
 			return Task.CompletedTask;
 		}
 
+		[HelpUseLimits(CommandUseLimit.Private)]
 		[Command("invite-togame")]
 		[Description("Приглашает людей в игру")]
 		public Task AddInvited(CommandContext ctx,
@@ -204,6 +210,7 @@ namespace CGZBot2.Handlers
 			return Task.CompletedTask;
 		}
 
+		[HelpUseLimits(CommandUseLimit.Private)]
 		[Command("send-game-invs")]
 		[Description("Оправляет приглашения всем приглашённым участником в игре")]
 		public Task SendInvites(CommandContext ctx,
@@ -220,6 +227,7 @@ namespace CGZBot2.Handlers
 			return Task.CompletedTask;
 		}
 
+		[HelpUseLimits(CommandUseLimit.Private)]
 		[Command("invite-party")]
 		[Description("Приглашает всех участников пати в игру")]
 		public Task AddPatryToInvited(CommandContext ctx,
@@ -261,6 +269,7 @@ namespace CGZBot2.Handlers
 			return Task.CompletedTask;
 		}
 
+		[HelpUseLimits(CommandUseLimit.Private)]
 		[Command("delete-party")]
 		[Description("Удаляет пати с сервера (только создатель)")]
 		public Task DeleteParty(CommandContext ctx,
@@ -341,6 +350,7 @@ namespace CGZBot2.Handlers
 			return Task.CompletedTask;
 		}
 
+		[HelpUseLimits(CommandUseLimit.Private)]
 		[Command("kick-party")]
 		[Description("Кикает участника из пати (только владелец)")]
 		public Task KickPartyMember(CommandContext ctx,
@@ -368,6 +378,7 @@ namespace CGZBot2.Handlers
 			return Task.CompletedTask;
 		}
 
+		[HelpUseLimits(CommandUseLimit.Private)]
 		[Command("join-party")]
 		[Description("Присоединяет участника к пати (только владелец)")]
 		public Task JoinMember(CommandContext ctx,

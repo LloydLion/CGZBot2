@@ -51,6 +51,7 @@ namespace CGZBot2
 			Client.UseCommandsNext(new CommandsNextConfiguration()
 			{
 				StringPrefixes = new string[] { "/" },
+				EnableDefaultHelp = false,
 			});
 
 			Client.UseInteractivity(new InteractivityConfiguration()
@@ -58,8 +59,9 @@ namespace CGZBot2
 				
 			});
 
-			var types = Assembly.GetExecutingAssembly().DefinedTypes.Where(s => typeof(BaseCommandModule).IsAssignableFrom(s));
+			var types = Assembly.GetExecutingAssembly().DefinedTypes.Where(s => typeof(BaseCommandModule).IsAssignableFrom(s) && s != typeof(CustomHelpHandler));
 			foreach (var type in types)	Client.GetCommandsNext().RegisterCommands(type);
+			Client.GetCommandsNext().RegisterCommands(typeof(CustomHelpHandler)); //NEEEEEED register last
 
 			Client.GetCommandsNext().CommandErrored += (sender, args) =>
 			{

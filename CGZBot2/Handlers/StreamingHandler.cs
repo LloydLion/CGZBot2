@@ -1,4 +1,5 @@
-﻿using CGZBot2.Entities;
+﻿using CGZBot2.Attributes;
+using CGZBot2.Entities;
 using DSharpPlus.CommandsNext;
 using DSharpPlus.CommandsNext.Attributes;
 using DSharpPlus.Entities;
@@ -11,6 +12,7 @@ using System.Threading.Tasks;
 
 namespace CGZBot2.Handlers
 {
+	[Description("Аннонсы и стримы")]
 	class StreamingHandler : BaseCommandModule
 	{
 		private static readonly GuildDictionary<DiscordChannel> announceChannel =
@@ -106,6 +108,7 @@ namespace CGZBot2.Handlers
 			return Task.CompletedTask;
 		}
 
+		[HelpUseLimits(CommandUseLimit.Private)]
 		[Command("edit-stream")]
 		[Description("Изменяет параметр стрима")]
 		public async Task EditStream(CommandContext ctx,
@@ -163,6 +166,7 @@ namespace CGZBot2.Handlers
 			UpdateReports(ctx.Guild);
 		}
 
+		[HelpUseLimits(CommandUseLimit.Private)]
 		[Command("cancel-stream")]
 		[Description("Отменяет стрим")]
 		public Task CancelStream(CommandContext ctx,

@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 
 namespace CGZBot2.Handlers
 {
+	[Description("Репутация")]
 	class ReputationHandler : BaseCommandModule
 	{
 		private static readonly GuildDictionary<List<ReputationRole>> rpRoles =

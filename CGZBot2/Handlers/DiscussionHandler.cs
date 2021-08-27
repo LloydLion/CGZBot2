@@ -1,4 +1,5 @@
-﻿using CGZBot2.Entities;
+﻿using CGZBot2.Attributes;
+using CGZBot2.Entities;
 using DSharpPlus;
 using DSharpPlus.CommandsNext;
 using DSharpPlus.CommandsNext.Attributes;
@@ -12,6 +13,7 @@ using System.Threading.Tasks;
 
 namespace CGZBot2.Handlers
 {
+	[Description("Дисскусии")]
 	class DiscussionHandler : BaseCommandModule
 	{
 		private static readonly GuildDictionary<List<DiscordChannel>> categories =
@@ -69,6 +71,7 @@ namespace CGZBot2.Handlers
 			return Task.CompletedTask;
 		}
 
+		[HelpUseLimits(CommandUseLimit.Admins)]
 		[Command("close-discuss")]
 		[Description("Закрывает дисскусию в которой была написана")]
 		public Task CloseDiscussion(CommandContext ctx)
