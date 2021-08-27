@@ -13,42 +13,49 @@ namespace CGZBot2
 
 
 		private readonly static Dictionary<(Type, string), IGuildDictionary> states = new();
+		private readonly static object sync = new object();
 
 
 		public static GuildDictionary<T> Get<T>(Type handler, string key, Func<T> defaultValueFactory)
 		{
-			var path = StateRootDirectory + handler.FullName +
-				Path.DirectorySeparatorChar + key + "." +
-				SerializatorProvider.DefaultDeserializator.Format;
+			lock (sync)
+			{
+				var path = StateRootDirectory + handler.FullName +
+					Path.DirectorySeparatorChar + key + "." +
+					SerializatorProvider.DefaultDeserializator.Format;
 
-			var empty = new GuildDictionary<T>() { DefaultValueFactory = defaultValueFactory };
+				var empty = new GuildDictionary<T>() { DefaultValueFactory = defaultValueFactory };
 
-			states.Add((handler, key), empty);
+				states.Add((handler, key), empty);
 
-			if (!File.Exists(path)) return empty;
+				if (!File.Exists(path)) return empty;
 
-			using var file = File.OpenRead(path);
+				using var file = File.OpenRead(path);
 
-			var ser = SerializatorProvider.DefaultDeserializator;
+				var ser = SerializatorProvider.DefaultDeserializator;
 
-			return ser.PopulateAsync(empty, new StreamReader(file)).Result;
+				return ser.PopulateAsync(empty, new StreamReader(file)).Result;
+			}
 		}
 
 		public static void Set(Type handler, string key, IGuildDictionary settings)
 		{
-			var path = StateRootDirectory + handler.FullName +
-				Path.DirectorySeparatorChar + key + "." +
-				SerializatorProvider.DefaultDeserializator.Format;
+			lock (sync)
+			{
+				var path = StateRootDirectory + handler.FullName +
+					Path.DirectorySeparatorChar + key + "." +
+					SerializatorProvider.DefaultDeserializator.Format;
 
-			if (File.Exists(path)) File.Delete(path);
+				if (File.Exists(path)) File.Delete(path);
 
-			var file = File.OpenWrite(path);
+				var file = File.OpenWrite(path);
 
-			var ser = SerializatorProvider.DefaultSerializator;
+				var ser = SerializatorProvider.DefaultSerializator;
 
-			ser.WriteAsync(settings, new StreamWriter(file)).Wait();
-			file.Flush();
-			file.Close();
+				ser.WriteAsync(settings, new StreamWriter(file)).Wait();
+				file.Flush();
+				file.Close();
+			}
 		}
 
 		public static void SaveAll()

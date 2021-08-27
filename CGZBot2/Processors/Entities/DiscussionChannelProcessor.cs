@@ -33,8 +33,7 @@ namespace CGZBot2.Processors.Entities
 				invoker.Prepare(discuss.ConfirmMessage, builder, "conf msg/");
 			builder.Root.AddReference("conf msg", refer);
 
-			builder.Root.AddBoolean("confirmed", discuss.IsConfirmed);
-			builder.Root.AddBoolean("deleted", discuss.IsDeleted);
+			builder.Root.AddString("state", discuss.State.ToString());
 
 			builder.ReturnNamespace();
 		}
@@ -43,12 +42,12 @@ namespace CGZBot2.Processors.Entities
 		{
 			var root = obj.GetEntry(rootId).Data;
 
-			var deleted = (bool)root.ReadPrimitive("deleted");
-			var confirmed = (bool)root.ReadPrimitive("confirmed");
+			var state = (DiscussionChannel.ConfirmState)Enum.Parse
+				(typeof(DiscussionChannel.ConfirmState), (string)root.ReadPrimitive("state"));
 
 			var channel = invoker.Restore<DiscordChannel>(null, typeof(DiscordChannel), obj, obj.GetEntryByRefInProp(root, "channel").Value.Id);
 
-			var ret = new DiscussionChannel(channel) { IsDeleted = deleted, IsConfirmed = confirmed };
+			var ret = new DiscussionChannel(channel) { State = state };
 
 			var confMsgEntry = obj.GetEntryByRefInProp(root, "conf msg");
 

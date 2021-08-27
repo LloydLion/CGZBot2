@@ -1,4 +1,5 @@
-﻿using DSharpPlus.Entities;
+﻿using CGZBot2.Tools;
+using DSharpPlus.Entities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,47 +11,68 @@ namespace CGZBot2.Entities
 {
 	class DiscussionChannel
 	{
-		private bool isConfirmed;
-		private bool isDeleted;
+		private readonly StateMachine<ConfirmState> stateMachine = new();
+		private ConfirmState startState = ConfirmState.Undetermined;
 
 
 		public DiscussionChannel(DiscordChannel channel)
 		{
 			Channel = channel;
 
-			ConfirmWaitTask = new Task(() => { while (!ConfirmWait(this)) { Thread.Sleep(1000); if (isDeleted) return; } isConfirmed = true; Confirmed?.Invoke(this); });
+			stateMachine.OnStateChangedTo(s => Confirmed?.Invoke(this), ConfirmState.Confirmed);
+			stateMachine.OnStateChangedTo(s => Rejected?.Invoke(this), ConfirmState.Deleted);
 		}
 
 
 		public event Action<DiscussionChannel> Confirmed;
 
-		public event Action<DiscussionChannel> Deleted;
+		public event Action<DiscussionChannel> Rejected;
 
 
 		public DiscordChannel Channel { get; }
 
 		public DiscordMessage ConfirmMessage { get; set; }
 
-		public bool IsConfirmed { get => isConfirmed; init => isConfirmed = value; }
-
-		public bool IsDeleted { get => isDeleted; init => isDeleted = value; }
-
-		public Task ConfirmWaitTask { get; }
-
 		public DiscordChannel Category => Channel.Parent;
 
 		public string Name => Channel.Name;
 
-		public Predicate<DiscussionChannel> ConfirmWait { get; set; }
+		public ITransitWorker<ConfirmState> ConfirmWorker { get; set; }
+
+		public ITransitWorker<ConfirmState> RejectWorker { get; set; }
 
 		public DiscordGuild Guild => Channel.Guild;
 
+		public IStateMachineReporter<ConfirmState> StateMachine => stateMachine;
 
-		public void Delete(bool needDeleteDcChannel = true)
+		public ConfirmState State { get => stateMachine.CurrentState; init => startState = value; }
+
+
+		public void Delete()
 		{
-			isDeleted = true;
-			if (needDeleteDcChannel) Channel.DeleteAsync();
-			Deleted?.Invoke(this);
+			Channel.DeleteAsync();
+			SoftDelete();
+		}
+
+		public void SoftDelete()
+		{
+			stateMachine.ChangeStateHard(ConfirmState.Deleted);
+		}
+
+		public void Run()
+		{
+			stateMachine.CreateTransit(ConfirmWorker, ConfirmState.Undetermined, ConfirmState.Confirmed);
+			stateMachine.CreateTransit(RejectWorker, ConfirmState.Undetermined, ConfirmState.Deleted);
+
+			stateMachine.Run(startState);
+		}
+
+
+		public enum ConfirmState
+		{
+			Undetermined,
+			Confirmed,
+			Deleted
 		}
 	}
 }

@@ -1,14 +1,17 @@
 ﻿using CGZBot2.Attributes;
 using CGZBot2.Entities;
+using CGZBot2.Tools;
 using DSharpPlus;
 using DSharpPlus.CommandsNext;
 using DSharpPlus.CommandsNext.Attributes;
 using DSharpPlus.Entities;
 using DSharpPlus.EventArgs;
+using DSharpPlus.Interactivity.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace CGZBot2.Handlers
@@ -34,10 +37,7 @@ namespace CGZBot2.Handlers
 			{
 				foreach (var channel in l.Value)
 				{
-					channel.Confirmed += DisChannelConfirmHandler;
-					channel.Deleted += DisChannelDeletedHandler;
-					channel.ConfirmWait = ChannelConfirmPredecate;
-					if(!channel.IsConfirmed && !channel.IsDeleted) channel.ConfirmWaitTask.Start();
+					InitDiscuss(channel);
 				}
 			}
 		}
@@ -60,13 +60,8 @@ namespace CGZBot2.Handlers
 			channel.ConfirmMessage.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":white_check_mark:")).Wait();
 			channel.ConfirmMessage.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":x:")).Wait();
 
-			channel.Confirmed += DisChannelConfirmHandler;
-			channel.Deleted += DisChannelDeletedHandler;
-			channel.ConfirmWait = ChannelConfirmPredecate;
-
+			InitDiscuss(channel);
 			DiscussionCreated?.Invoke(channel, ctx.Member);
-
-			channel.ConfirmWaitTask.Start();
 
 			return Task.CompletedTask;
 		}
@@ -106,29 +101,44 @@ namespace CGZBot2.Handlers
 			return Task.CompletedTask;
 		}
 
+		public void InitDiscuss(DiscussionChannel discussion)
+		{
+			discussion.Confirmed += DisChannelConfirmHandler;
+			discussion.Rejected += DisChannelRejectedHandler;
+
+			discussion.ConfirmWorker = new TaskTransitWorker<DiscussionChannel.ConfirmState>(waitReaction("✅"));
+			discussion.RejectWorker = new TaskTransitWorker<DiscussionChannel.ConfirmState>(waitReaction("❌"));
+
+			discussion.Run();
+
+			Func<Task> waitReaction(string reaction)
+			{
+				return async () =>
+				{
+					bool loop = true;
+					while (loop)
+					{
+						var interact = await Program.Client.GetInteractivity().WaitForReactionAsync(s =>
+							s.Emoji.Name == reaction && s.Message == discussion.ConfirmMessage &&
+							s.Guild.GetMemberAsync(s.User.Id).Result.PermissionsIn(discussion.Channel).HasPermission(Permissions.ManageChannels));
+						loop = interact.TimedOut;
+					}
+				};
+			}
+		}
+
 		private void DisChannelConfirmHandler(DiscussionChannel channel)
 		{
 			channel.ConfirmMessage.DeleteAsync();
+			channel.ConfirmMessage = null;
 			HandlerState.Set(typeof(DiscussionHandler), nameof(channels), channels);
 		}
 
-		private void DisChannelDeletedHandler(DiscussionChannel channel)
+		private void DisChannelRejectedHandler(DiscussionChannel channel)
 		{
+			channel.Delete();
+			channels[channel.Guild].Remove(channel);
 			HandlerState.Set(typeof(DiscussionHandler), nameof(channels), channels);
-		}
-
-		private bool ChannelConfirmPredecate(DiscussionChannel channel)
-		{
-			if (channel.ConfirmMessage.GetReactionsAsync(DiscordEmoji.FromName(Program.Client, ":x:")).Result.Where(s => !s.IsBot)
-				.Any(s => channel.Guild.GetMemberAsync(s.Id).Result.PermissionsIn(channel.Channel).HasFlag(Permissions.ManageChannels)))
-			{
-				channels[channel.Guild].Remove(channel);
-				channel.Delete();
-				return false;
-			}
-
-			return channel.ConfirmMessage.GetReactionsAsync(DiscordEmoji.FromName(Program.Client, ":white_check_mark:")).Result.Where(s => !s.IsBot)
-				.Any(s => channel.Guild.GetMemberAsync(s.Id).Result.PermissionsIn(channel.Channel).HasFlag(Permissions.ManageChannels));
 		}
 
 		private bool CheckDiscussionCategory(DiscordChannel channel, CommandContext ctx = null, DiscordGuild guild = null)
@@ -171,8 +181,9 @@ namespace CGZBot2.Handlers
 			var channel = GetDiscussionChannel(args.Channel, null, args.Guild);
 			if (channel == null) return Task.CompletedTask;
 
+			channel.SoftDelete();
 			channels[channel.Guild].Remove(channel);
-			channel.Delete(needDeleteDcChannel: false);
+			HandlerState.Set(typeof(DiscussionHandler), nameof(channels), channels);
 			args.Handled = true;
 
 			return Task.CompletedTask;

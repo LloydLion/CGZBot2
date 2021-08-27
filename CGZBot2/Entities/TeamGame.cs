@@ -124,20 +124,5 @@ namespace CGZBot2.Entities
 
 			stateMachine.Run(startState);
 		}
-
-		private Func<Task> CreateTransitTask(Func<Predicate<TeamGame>> getPredicate)
-		{
-			return () => new Task(() =>
-			{
-				bool t;
-
-				do
-				{
-					if (State == GameState.Canceled) throw new Exception();
-					Thread.Sleep(1000);
-					try { t = !getPredicate()(this); } catch (Exception) { t = true; }
-				} while (t);
-			});
-		}
 	}
 }
