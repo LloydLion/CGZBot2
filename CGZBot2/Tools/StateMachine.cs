@@ -202,11 +202,56 @@ namespace CGZBot2.Tools
 			currentTask = Task.Run(() =>
 			{
 				machine.WaitForStateAsync(transit.OriginState).Wait();
-				task.Start();
+				if(task.Status == TaskStatus.Created) task.Start();
 				task.Wait();
 			});
 
 			currentTask.ContinueWith(s => { if (currentTask.IsCompletedSuccessfully) ReadyToTransit = true; transited = true; });
 		}
+	}
+
+	class PredicateTransitWorker<TState> : ITransitWorker<TState> where TState : Enum
+	{
+		private readonly Predicate<StateMachine<TState>> predicate;
+		private StateMachine<TState> machine;
+
+
+		public PredicateTransitWorker(Predicate<StateMachine<TState>> predicate)
+		{
+			this.predicate = predicate;
+		}
+
+
+		public bool ReadyToTransit => predicate(machine);
+
+
+		public void Reset()
+		{
+			
+		}
+
+		public void Start(StateMachine<TState>.StateTransit transit, StateMachine<TState> machine)
+		{
+			this.machine = machine;
+		}
+	}
+
+	class InvertedTransitWorker<TState> : ITransitWorker<TState> where TState : Enum
+	{
+		private readonly ITransitWorker<TState> worker;
+
+
+		public bool ReadyToTransit => !worker.ReadyToTransit;
+
+
+		public InvertedTransitWorker(ITransitWorker<TState> worker)
+		{
+			this.worker = worker;
+		}
+
+
+		public void Reset() => worker.Reset();
+
+		public void Start(StateMachine<TState>.StateTransit transit, StateMachine<TState> machine) => worker.Start(transit, machine);
 	}
 }

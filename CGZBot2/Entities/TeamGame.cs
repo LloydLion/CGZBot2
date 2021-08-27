@@ -27,11 +27,6 @@ namespace CGZBot2.Entities
 			Description = description;
 			TargetMembersCount = membersCount;
 
-			stateMachine.CreateTransit(new TaskTransitWorker<GameState>(CreateTransitTask(() => MembersWait), false), GameState.Created, GameState.WaitingForCreator);
-			stateMachine.CreateTransit(new TaskTransitWorker<GameState>(CreateTransitTask(() => (a) => !MembersWait(a)), false), GameState.WaitingForCreator, GameState.Created);
-			stateMachine.CreateTransit(new TaskTransitWorker<GameState>(CreateTransitTask(() => CreatorWait), true), GameState.WaitingForCreator, GameState.Running);
-			stateMachine.CreateTransit(new TaskTransitWorker<GameState>(CreateTransitTask(() => GameEndWait), true), GameState.Running, GameState.Finished);
-
 			stateMachine.OnStateChangedTo(m => { WaitingForMembers?.Invoke(this); }, GameState.Created);
 			stateMachine.OnStateChangedTo(m => { WaitingForCreator?.Invoke(this); }, GameState.WaitingForCreator);
 			stateMachine.OnStateChangedTo(m => { startDate = DateTime.Now; Started?.Invoke(this); }, GameState.Running);
@@ -75,11 +70,11 @@ namespace CGZBot2.Entities
 
 		public ICollection<DiscordMember> Invited { get => invited; set { invited.Clear(); ((IReadOnlyCollection<DiscordMember>)value).CopyTo(invited); } }
 
-		public Predicate<TeamGame> MembersWait { get; set; }
+		public ITransitWorker<GameState> MembersWaitWorker { get; set; }
 
-		public Predicate<TeamGame> CreatorWait { get; set; }
+		public ITransitWorker<GameState> CreatorWaitWorker { get; set; }
 
-		public Predicate<TeamGame> GameEndWait { get; set; }
+		public ITransitWorker<GameState> GameEndWorker { get; set; }
 
 		public bool NeedReportUpdate => State != ReportMessageType || requestedRpUpdate;
 
@@ -122,6 +117,11 @@ namespace CGZBot2.Entities
 
 		public void Run()
 		{
+			stateMachine.CreateTransit(MembersWaitWorker, GameState.Created, GameState.WaitingForCreator);
+			stateMachine.CreateTransit(new InvertedTransitWorker<GameState>(MembersWaitWorker), GameState.WaitingForCreator, GameState.Created);
+			stateMachine.CreateTransit(CreatorWaitWorker, GameState.WaitingForCreator, GameState.Running);
+			stateMachine.CreateTransit(GameEndWorker, GameState.Running, GameState.Finished);
+
 			stateMachine.Run(startState);
 		}
 

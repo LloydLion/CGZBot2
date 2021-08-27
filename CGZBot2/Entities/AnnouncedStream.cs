@@ -27,10 +27,6 @@ namespace CGZBot2.Entities
 			Place = place;
 			PlaceType = placeType;
 
-			stateMachine.CreateTransit(new TaskTransitWorker<StreamState>(CreateTransitTask(() => StartWait), true), StreamState.Announced, StreamState.WaitingForStreamer);
-			stateMachine.CreateTransit(new TaskTransitWorker<StreamState>(CreateTransitTask(() => StreamerWait), true), StreamState.WaitingForStreamer, StreamState.Running);
-			stateMachine.CreateTransit(new TaskTransitWorker<StreamState>(CreateTransitTask(() => StreamEndWait), true), StreamState.Running, StreamState.Finished);
-
 			stateMachine.OnStateChangedTo(m => { WaitingForStreamer?.Invoke(this); }, StreamState.WaitingForStreamer);
 			stateMachine.OnStateChangedTo(m => { realStartDate = DateTime.Now; Started?.Invoke(this); }, StreamState.Running);
 			stateMachine.OnStateChangedTo(m => { finishDate = DateTime.Now; Finished?.Invoke(this); }, StreamState.Finished);
@@ -61,11 +57,11 @@ namespace CGZBot2.Entities
 
 		public StreamingPlaceType PlaceType { get; set; }
 
-		public Predicate<AnnouncedStream> StartWait { get; set; }
+		public ITransitWorker<StreamState>  StartWorker { get; set; }
 
-		public Predicate<AnnouncedStream> StreamerWait { get; set; }
+		public ITransitWorker<StreamState> StreamerWaitWorker { get; set; }
 
-		public Predicate<AnnouncedStream> StreamEndWait { get; set; }
+		public ITransitWorker<StreamState> StreamEndWorker { get; set; }
 
 		public StreamState State { get => stateMachine.CurrentState; init => startState = value; }
 
@@ -100,6 +96,10 @@ namespace CGZBot2.Entities
 
 		public void Run()
 		{
+			stateMachine.CreateTransit(StartWorker, StreamState.Announced, StreamState.WaitingForStreamer);
+			stateMachine.CreateTransit(StreamerWaitWorker, StreamState.WaitingForStreamer, StreamState.Running);
+			stateMachine.CreateTransit(StreamEndWorker, StreamState.Running, StreamState.Finished);
+
 			stateMachine.Run(startState);
 		}
 
@@ -118,22 +118,6 @@ namespace CGZBot2.Entities
 			Running = 0b00100,
 			Finished = 0b00010,
 			Canceled = 0b00011
-		}
-
-
-		private Func<Task> CreateTransitTask(Func<Predicate<AnnouncedStream>> getPredicate)
-		{
-			return () => new Task(() =>
-			{
-				bool t;
-
-				do
-				{
-					if (State == StreamState.Canceled) throw new Exception();
-					Thread.Sleep(1000);
-					try { t = !getPredicate()(this); } catch (Exception) { t = true; }
-				} while (t);
-			});
 		}
 	}
 }

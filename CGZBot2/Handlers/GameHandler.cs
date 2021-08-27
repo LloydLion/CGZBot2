@@ -4,6 +4,7 @@ using CGZBot2.Tools;
 using DSharpPlus.CommandsNext;
 using DSharpPlus.CommandsNext.Attributes;
 using DSharpPlus.Entities;
+using DSharpPlus.Interactivity.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -41,18 +42,7 @@ namespace CGZBot2.Handlers
 				{
 					lock(game.SyncRoot)
 					{
-						game.Started += StartedGameHandler;
-						game.Finished += FinishedGameHandler;
-						game.Canceled += CanceledGameHandler;
-						game.WaitingForMembers += WaitingForMembersGameHandler;
-						game.WaitingForCreator += WaitingForCreatorGameHandler;
-						game.StateMachine.StateChanged += (a) => GameStateChangedHandler(game);
-
-						game.MembersWait = MembersWaitPredicate;
-						game.GameEndWait = EndWaitPredicate;
-						game.CreatorWait = CreatorWaitPredicate;
-
-						game.Run();
+						InitGame(game);
 					}
 				}
 
@@ -91,18 +81,7 @@ namespace CGZBot2.Handlers
 
 			lock (game.SyncRoot)
 			{
-				game.MembersWait = MembersWaitPredicate;
-				game.GameEndWait = EndWaitPredicate;
-				game.CreatorWait = CreatorWaitPredicate;
-
-				game.Started += StartedGameHandler;
-				game.Finished += FinishedGameHandler;
-				game.Canceled += CanceledGameHandler;
-				game.WaitingForMembers += WaitingForMembersGameHandler;
-				game.WaitingForCreator += WaitingForCreatorGameHandler;
-				game.StateMachine.StateChanged += (a) => GameStateChangedHandler(game);
-
-				game.Run();
+				InitGame(game);
 
 				GameCreated?.Invoke(game);
 
@@ -401,6 +380,36 @@ namespace CGZBot2.Handlers
 			return Task.CompletedTask;
 		}
 
+		private void InitGame(TeamGame game)
+		{
+			game.MembersWaitWorker = new PredicateTransitWorker<TeamGame.GameState>(s => MembersWaitPredicate(game));
+			game.CreatorWaitWorker = new TaskTransitWorker<TeamGame.GameState>(waitReaction("▶️"), true);
+			game.GameEndWorker = new TaskTransitWorker<TeamGame.GameState>(waitReaction("❌"), true);
+
+			game.Started += StartedGameHandler;
+			game.Finished += FinishedGameHandler;
+			game.Canceled += CanceledGameHandler;
+			game.WaitingForMembers += WaitingForMembersGameHandler;
+			game.WaitingForCreator += WaitingForCreatorGameHandler;
+			game.StateMachine.StateChanged += (a) => GameStateChangedHandler(game);
+
+			game.Run();
+
+			Func<Task> waitReaction(string reaction)
+			{
+				return async () =>
+				{
+					bool loop = true;
+					while (loop)
+					{
+						var interact = await Program.Client.GetInteractivity().WaitForReactionAsync(s =>
+							s.Emoji.Name == reaction && s.Message == game.ReportMessage, game.Creator);
+						loop = interact.TimedOut;
+					}
+				};
+			}
+		}
+
 		private TeamGame GetGame(CommandContext ctx, string gameName)
 		{
 			var games = startedGames[ctx].Where(s => s.Creator == ctx.Member && s.GameName == gameName).ToArray();
@@ -548,14 +557,6 @@ namespace CGZBot2.Handlers
 			startedGames[game.Guild].Remove(game);
 		}
 
-		private bool EndWaitPredicate(TeamGame game)
-		{
-			lock(game.SyncRoot)
-			{
-				return GetEmoji(game, ":x:").Where(s => s == game.Creator).Any();
-			}
-		}
-
 		private bool MembersWaitPredicate(TeamGame game)
 		{
 			lock (game.SyncRoot)
@@ -569,14 +570,6 @@ namespace CGZBot2.Handlers
 				}
 
 				return false;
-			}
-		}
-
-		private bool CreatorWaitPredicate(TeamGame game)
-		{
-			lock(game.SyncRoot)
-			{
-				return GetEmoji(game, ":arrow_forward:").Any(s => s == game.Creator);
 			}
 		}
 

@@ -1,8 +1,10 @@
 ﻿using CGZBot2.Attributes;
 using CGZBot2.Entities;
+using CGZBot2.Tools;
 using DSharpPlus.CommandsNext;
 using DSharpPlus.CommandsNext.Attributes;
 using DSharpPlus.Entities;
+using DSharpPlus.Interactivity.Extensions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -32,18 +34,10 @@ namespace CGZBot2.Handlers
 			{	
 				foreach (var stream in l.Value)
 				{
+					var tmp = stream;
 					lock (stream.SyncRoot)
 					{
-						stream.Started += StartedStreamHandler;
-						stream.WaitingForStreamer += WaitingForStreamerHandler;
-						stream.Finished += FinishedStreamHandler;
-						stream.Canceled += CanceledStreamHandler;
-
-						stream.StartWait = StartWaitPredicate;
-						stream.StreamerWait = StreamerWaitPredicate;
-						stream.StreamEndWait = StreamEndPredicate;
-
-						stream.Run();
+						InitStream(tmp);
 					}
 				}
 
@@ -88,16 +82,7 @@ namespace CGZBot2.Handlers
 
 			lock (stream.SyncRoot)
 			{
-				stream.Started += StartedStreamHandler;
-				stream.WaitingForStreamer += WaitingForStreamerHandler;
-				stream.Finished += FinishedStreamHandler;
-				stream.Canceled += CanceledStreamHandler;
-
-				stream.StartWait = StartWaitPredicate;
-				stream.StreamerWait = StreamerWaitPredicate;
-				stream.StreamEndWait = StreamEndPredicate;
-
-				stream.Run();
+				InitStream(stream);
 
 				StreamCreated?.Invoke(stream);
 
@@ -243,6 +228,34 @@ namespace CGZBot2.Handlers
 						stream.ResetReportUpdate();
 					}
 				}
+			}
+		}
+
+		private void InitStream(AnnouncedStream stream)
+		{
+			stream.Started += StartedStreamHandler;
+			stream.WaitingForStreamer += WaitingForStreamerHandler;
+			stream.Finished += FinishedStreamHandler;
+			stream.Canceled += CanceledStreamHandler;
+
+			stream.StartWorker = new PredicateTransitWorker<AnnouncedStream.StreamState>(s => StartWaitPredicate(stream));
+			stream.StreamerWaitWorker = new TaskTransitWorker<AnnouncedStream.StreamState>(waitReaction("▶️"), true);
+			stream.StreamEndWorker = new TaskTransitWorker<AnnouncedStream.StreamState>(waitReaction("❌"), true);
+
+			stream.Run();
+
+			Func<Task> waitReaction(string reaction)
+			{
+				return async () =>
+				{
+					bool loop = true;
+					while (loop)
+					{
+						var interact = await Program.Client.GetInteractivity().WaitForReactionAsync(s =>
+							s.Emoji.Name == reaction && s.Message == stream.ReportMessage, stream.Creator);
+						loop = interact.TimedOut;
+					}
+				};
 			}
 		}
 
