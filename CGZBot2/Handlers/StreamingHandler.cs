@@ -1,6 +1,7 @@
 ﻿using CGZBot2.Attributes;
 using CGZBot2.Entities;
 using CGZBot2.Tools;
+using DSharpPlus;
 using DSharpPlus.CommandsNext;
 using DSharpPlus.CommandsNext.Attributes;
 using DSharpPlus.Entities;
@@ -192,10 +193,11 @@ namespace CGZBot2.Handlers
 					{
 						if (!stream.NeedReportUpdate) continue;
 
-						stream.ReportMessage?.TryDelete();
 						var builder = new DiscordEmbedBuilder();
+						var msgbuilder = new DiscordMessageBuilder();
 
 						if (stream.State.HasFlag(AnnouncedStream.StreamState.Announced))
+						{
 							builder
 								.WithColor(DiscordColor.Cyan)
 								.WithTimestamp(stream.CreationDate)
@@ -204,8 +206,14 @@ namespace CGZBot2.Handlers
 								.AddField("Название", stream.Name)
 								.AddField("Время провидения", stream.StartDate.ToString())
 								.AddField("Место", stream.PlaceType == AnnouncedStream.StreamingPlaceType.Discord ?
-									$"В дискорд канале; {stream.Place}" : stream.Place);
+									$"В дискорд канале {stream.Place}" : stream.Place);
+
+							if (stream.State == AnnouncedStream.StreamState.WaitingForStreamer)
+								msgbuilder.AddComponents(new DiscordButtonComponent(ButtonStyle.Primary, "start", "Начать стрим",
+									emoji: new DiscordComponentEmoji(DiscordEmoji.FromName(Program.Client, ":arrow_forward:"))));
+						}
 						else if (stream.State == AnnouncedStream.StreamState.Running)
+						{
 							builder
 								.WithColor(DiscordColor.Blurple)
 								.WithTimestamp(stream.RealStartDate)
@@ -215,14 +223,24 @@ namespace CGZBot2.Handlers
 								.AddField("Время провидения", stream.StartDate.ToString())
 								.AddField("Место", stream.PlaceType == AnnouncedStream.StreamingPlaceType.Discord ?
 									$"В дискорд канале {stream.Place}" : stream.Place);
+
+							msgbuilder.AddComponents(new DiscordButtonComponent(ButtonStyle.Primary, "stop", "Завершить стрим",
+								emoji: new DiscordComponentEmoji(DiscordEmoji.FromName(Program.Client, ":x:"))));
+
+							if(stream.PlaceType == AnnouncedStream.StreamingPlaceType.Internet)
+							{
+								msgbuilder.AddComponents(new DiscordLinkButtonComponent(stream.Place, "Смотреть стрим",
+									emoji: new DiscordComponentEmoji(DiscordEmoji.FromName(Program.Client, ":x:"))));
+							}
+						}
 						else continue;
 
-						stream.ReportMessage = channel.SendMessageAsync(builder.Build()).Result;
+						msgbuilder.AddEmbed(builder.Build());
 
-						if (stream.State == AnnouncedStream.StreamState.Running)
-							stream.ReportMessage.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":x:"));
-						else if (stream.State == AnnouncedStream.StreamState.WaitingForStreamer)
-							stream.ReportMessage.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":arrow_forward:"));
+						if (stream.ReportMessage == null)
+							stream.ReportMessage = channel.SendMessageAsync(msgbuilder).Result;
+						else
+							stream.ReportMessage = stream.ReportMessage.ModifyAsync(msgbuilder).Result;
 
 						stream.ReportMessageType = stream.State;
 						stream.ResetReportUpdate();
@@ -239,22 +257,35 @@ namespace CGZBot2.Handlers
 			stream.Canceled += CanceledStreamHandler;
 
 			stream.StartWorker = new PredicateTransitWorker<AnnouncedStream.StreamState>(s => StartWaitPredicate(stream));
-			stream.StreamerWaitWorker = new TaskTransitWorker<AnnouncedStream.StreamState>(waitReaction("▶️"), true);
-			stream.StreamEndWorker = new TaskTransitWorker<AnnouncedStream.StreamState>(waitReaction("❌"), true);
+			stream.StreamerWaitWorker = new TaskTransitWorker<AnnouncedStream.StreamState>(waitButton("start"), true);
+			stream.StreamEndWorker = new TaskTransitWorker<AnnouncedStream.StreamState>(waitButton("stop"), true);
 
 			stream.Run();
 
-			Func<Task> waitReaction(string reaction)
+			Func<Task> waitButton(string btnid)
 			{
-				return async () =>
+				return () =>
 				{
-					bool loop = true;
-					while (loop)
+					return new Task(() =>
 					{
-						var interact = await Program.Client.GetInteractivity().WaitForReactionAsync(s =>
-							s.Emoji.Name == reaction && s.Message == stream.ReportMessage, stream.Creator);
-						loop = interact.TimedOut;
-					}
+					restart:
+						var args = Utils.WaitForButton(() => stream.ReportMessage, btnid).Result;
+
+						var builder = new DiscordInteractionResponseBuilder().AsEphemeral(true);
+
+						var member = stream.Guild.GetMemberAsync(args.User.Id).Result;
+						if (member != stream.Creator)
+						{
+							builder.WithContent("Вы не создатель стрима");
+							args.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, builder).Wait();
+							goto restart;
+						}
+						else
+						{
+							builder.WithContent("Успешно");
+							args.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, builder).Wait();
+						}
+					});
 				};
 			}
 		}

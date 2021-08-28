@@ -6,6 +6,7 @@ using DSharpPlus.CommandsNext;
 using DSharpPlus.CommandsNext.Attributes;
 using DSharpPlus.Entities;
 using DSharpPlus.EventArgs;
+using DSharpPlus.Interactivity;
 using DSharpPlus.Interactivity.Extensions;
 using System;
 using System.Collections.Generic;
@@ -54,11 +55,13 @@ namespace CGZBot2.Handlers
 			var channel = new DiscussionChannel(dchannel);
 			channels[ctx].Add(channel);
 
-			channel.ConfirmMessage = channel.Channel.SendMessageAsync
-				("Данный канал не подтверждён админстрацией сервера.\nКанал может быть удалён или переименнован в будущем").Result;
+			channel.ConfirmMessage = channel.Channel.SendMessageAsync(s =>
+				{
+					s.WithContent("Данный канал не подтверждён админстрацией сервера.\nКанал может быть удалён или переименнован в будущем");
+					s.AddComponents(new DiscordButtonComponent(ButtonStyle.Primary, "ok", "Подтвердить", emoji: new DiscordComponentEmoji(DiscordEmoji.FromName(Program.Client, ":white_check_mark:"))),
+						new DiscordButtonComponent(ButtonStyle.Secondary, "delete", "Удалить", emoji: new DiscordComponentEmoji(DiscordEmoji.FromName(Program.Client, ":x:"))));
+				}).Result;
 			channel.ConfirmMessage.PinAsync().Wait();
-			channel.ConfirmMessage.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":white_check_mark:")).Wait();
-			channel.ConfirmMessage.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":x:")).Wait();
 
 			InitDiscuss(channel);
 			DiscussionCreated?.Invoke(channel, ctx.Member);
@@ -106,22 +109,31 @@ namespace CGZBot2.Handlers
 			discussion.Confirmed += DisChannelConfirmHandler;
 			discussion.Rejected += DisChannelRejectedHandler;
 
-			discussion.ConfirmWorker = new TaskTransitWorker<DiscussionChannel.ConfirmState>(waitReaction("✅"));
-			discussion.RejectWorker = new TaskTransitWorker<DiscussionChannel.ConfirmState>(waitReaction("❌"));
+			discussion.ConfirmWorker = new TaskTransitWorker<DiscussionChannel.ConfirmState>(waitButton("ok"), true);
+			discussion.RejectWorker = new TaskTransitWorker<DiscussionChannel.ConfirmState>(waitButton("delete"), true);
 
 			discussion.Run();
 
-			Func<Task> waitReaction(string reaction)
+			Func<Task> waitButton(string btnid)
 			{
 				return async () =>
 				{
-					bool loop = true;
-					while (loop)
+				restart:
+					var args = await Utils.WaitForButton(discussion.ConfirmMessage, btnid);
+
+					var builder = new DiscordInteractionResponseBuilder().AsEphemeral(true);
+
+					var member = discussion.Guild.GetMemberAsync(args.User.Id).Result;
+					if (!member.PermissionsIn(discussion.Channel).HasPermission(Permissions.ManageChannels))
 					{
-						var interact = await Program.Client.GetInteractivity().WaitForReactionAsync(s =>
-							s.Emoji.Name == reaction && s.Message == discussion.ConfirmMessage &&
-							s.Guild.GetMemberAsync(s.User.Id).Result.PermissionsIn(discussion.Channel).HasPermission(Permissions.ManageChannels));
-						loop = interact.TimedOut;
+						builder.WithContent("У вас не достаточно прав для этой операции (Управление каналами)");
+						await args.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, builder);
+						goto restart;
+					}
+					else
+					{
+						builder.WithContent("Успешно");
+						await args.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, builder);
 					}
 				};
 			}

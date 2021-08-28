@@ -1,6 +1,7 @@
 ﻿using CGZBot2.Attributes;
 using CGZBot2.Entities;
 using CGZBot2.Tools;
+using DSharpPlus;
 using DSharpPlus.CommandsNext;
 using DSharpPlus.CommandsNext.Attributes;
 using DSharpPlus.Entities;
@@ -383,8 +384,8 @@ namespace CGZBot2.Handlers
 		private void InitGame(TeamGame game)
 		{
 			game.MembersWaitWorker = new PredicateTransitWorker<TeamGame.GameState>(s => MembersWaitPredicate(game));
-			game.CreatorWaitWorker = new TaskTransitWorker<TeamGame.GameState>(waitReaction("▶️"), true);
-			game.GameEndWorker = new TaskTransitWorker<TeamGame.GameState>(waitReaction("❌"), true);
+			game.CreatorWaitWorker = new TaskTransitWorker<TeamGame.GameState>(waitButton("start"), true);
+			game.GameEndWorker = new TaskTransitWorker<TeamGame.GameState>(waitButton("stop"), true);
 
 			game.Started += StartedGameHandler;
 			game.Finished += FinishedGameHandler;
@@ -395,17 +396,30 @@ namespace CGZBot2.Handlers
 
 			game.Run();
 
-			Func<Task> waitReaction(string reaction)
+			Func<Task> waitButton(string btnid)
 			{
-				return async () =>
+				return () =>
 				{
-					bool loop = true;
-					while (loop)
+					return new Task(() =>
 					{
-						var interact = await Program.Client.GetInteractivity().WaitForReactionAsync(s =>
-							s.Emoji.Name == reaction && s.Message == game.ReportMessage, game.Creator);
-						loop = interact.TimedOut;
-					}
+					restart:
+						var args = Utils.WaitForButton(() => game.ReportMessage, btnid).Result;
+
+						var builder = new DiscordInteractionResponseBuilder().AsEphemeral(true);
+
+						var member = game.Guild.GetMemberAsync(args.User.Id).Result;
+						if (member != game.Creator)
+						{
+							builder.WithContent("Вы не создатель игры");
+							args.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, builder).Wait();
+							goto restart;
+						}
+						else
+						{
+							builder.WithContent("Успешно");
+							args.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, builder).Wait();
+						}
+					});
 				};
 			}
 		}
@@ -473,42 +487,48 @@ namespace CGZBot2.Handlers
 					lock (game.SyncRoot)
 					{
 						var builder = new DiscordEmbedBuilder();
-
-						if (game.State == TeamGame.GameState.Created)
-						{
-							var invStr = string.Join(", ", game.Invited.Select(s => s.Mention));
-							if (string.IsNullOrWhiteSpace(invStr)) invStr = "--";
-
-							builder
-								.WithColor(DiscordColor.DarkRed)
-								.WithAuthor(game.Creator.DisplayName, game.Creator.AvatarUrl)
-								.WithTitle("Игра в " + game.GameName)
-								.AddField("Приглашены", invStr)
-								.AddField("Запуск при", "присоединении " + game.TargetMembersCount + " участников" + (game.ReqAllInvited ? " и всех приглашённых" : ""))
-								.WithTimestamp(game.CreationDate);
-							if (!string.IsNullOrWhiteSpace(game.Description)) builder.AddField("Описание", game.Description);
-						}
-						else if (game.State == TeamGame.GameState.Running)
-							builder
-								.WithColor(DiscordColor.HotPink)
-								.WithAuthor(game.Creator.DisplayName, game.Creator.AvatarUrl)
-								.WithTitle("Игра в " + game.GameName + " начата")
-								.AddField("Участники", string.Join(", ", game.TeamMembers.Select(s => s.Mention)))
-								.WithTimestamp(game.StartDate);
-						else continue;
-
-						if (game.ReportMessage == null)
-							game.ReportMessage = channel.SendMessageAsync(builder.Build()).Result;
-						else
-							game.ReportMessage = game.ReportMessage.ModifyAsync(builder.Build()).Result;
+						var msgbuilder = new DiscordMessageBuilder();
 
 						if (game.State.HasFlag(TeamGame.GameState.Created))
 						{
-							game.ReportMessage.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":ok_hand:"));
-							game.ReportMessage.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":arrow_forward:"));
+							builder
+								.WithColor(DiscordColor.DarkRed)
+								.WithAuthor(game.Creator.DisplayName, iconUrl: game.Creator.AvatarUrl)
+								.WithTitle("Игра в " + game.GameName)
+								.AddField("Запуск при", "присоединении " + game.TargetMembersCount + " участников" + (game.ReqAllInvited ? " и всех приглашённых" : ""))
+								.WithTimestamp(game.CreationDate);
+
+							var invStr = string.Join(", ", game.Invited.Select(s => s.Mention));
+							if (!string.IsNullOrWhiteSpace(invStr)) builder.AddField("Приглашены", invStr);
+							if (!string.IsNullOrWhiteSpace(game.Description)) builder.AddField("Описание", game.Description);
+
+							msgbuilder.AddComponents(new DiscordButtonComponent(ButtonStyle.Primary, "start", "Начать игру",
+								game.State == TeamGame.GameState.Created, new DiscordComponentEmoji(DiscordEmoji.FromName(Program.Client, ":arrow_forward:"))));
 						}
 						else if (game.State == TeamGame.GameState.Running)
-							game.ReportMessage.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":x:"));
+						{
+							builder
+								.WithColor(DiscordColor.HotPink)
+								.WithAuthor(game.Creator.DisplayName, iconUrl: game.Creator.AvatarUrl)
+								.WithTitle("Игра в " + game.GameName + " начата")
+								.AddField("Участники", string.Join(", ", game.TeamMembers.Select(s => s.Mention)))
+								.WithTimestamp(game.StartDate);
+
+							msgbuilder.AddComponents(new DiscordButtonComponent(ButtonStyle.Primary, "stop", "Завершить игру", emoji: new DiscordComponentEmoji(DiscordEmoji.FromName(Program.Client, ":x:"))));
+						}
+						else continue;
+
+						msgbuilder.AddEmbed(builder.Build());
+
+						if (game.ReportMessage == null)
+							game.ReportMessage = channel.SendMessageAsync(msgbuilder).Result;
+						else
+							game.ReportMessage = game.ReportMessage.ModifyAsync(msgbuilder).Result;
+
+
+						if (game.State.HasFlag(TeamGame.GameState.Created))
+							game.ReportMessage.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":ok_hand:"));
+
 
 						game.ReportMessageType = game.State;
 						game.ResetReportUpdate();

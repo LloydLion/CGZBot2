@@ -113,20 +113,23 @@ namespace CGZBot2.Handlers
 
 		private MemberReputation GetReputation(DiscordMember member)
 		{
-			var mems = reputation[member.Guild].Where(s => s.Member == member).ToList();
-
-			if(mems.Count == 0)
+			lock (reputation)
 			{
-				var rp = new MemberReputation(member);
+				var mems = reputation[member.Guild].Where(s => s.Member == member).ToList();
 
-				rp.LevelChanged += ReputationLevelChanged;
+				if (mems.Count == 0)
+				{
+					var rp = new MemberReputation(member);
 
-				reputation[member.Guild].Add(rp);
-				return rp;
+					rp.LevelChanged += ReputationLevelChanged;
+
+					reputation[member.Guild].Add(rp);
+					return rp;
+				}
+
+				if (mems.Count > 1) throw new Exception("Ce Pi**ec");
+				return mems.Single();
 			}
-
-			if (mems.Count > 1) throw new Exception("Ce Pi**ec");
-			return mems.Single();
 		}
 
 		private void ReputationLevelChanged(MemberReputation rp, int levelChange)
