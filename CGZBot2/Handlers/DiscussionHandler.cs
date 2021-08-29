@@ -33,6 +33,7 @@ namespace CGZBot2.Handlers
 		public DiscussionHandler()
 		{
 			Program.Client.ChannelDeleted += OnChannelDeleted;
+			Program.Client.MessageDeleted += OnMessageDeleted;
 
 			foreach (var l in channels)
 			{
@@ -55,13 +56,7 @@ namespace CGZBot2.Handlers
 			var channel = new DiscussionChannel(dchannel);
 			channels[ctx].Add(channel);
 
-			channel.ConfirmMessage = channel.Channel.SendMessageAsync(s =>
-				{
-					s.WithContent("Данный канал не подтверждён админстрацией сервера.\nКанал может быть удалён или переименнован в будущем");
-					s.AddComponents(new DiscordButtonComponent(ButtonStyle.Primary, "ok", "Подтвердить", emoji: new DiscordComponentEmoji(DiscordEmoji.FromName(Program.Client, ":white_check_mark:"))),
-						new DiscordButtonComponent(ButtonStyle.Secondary, "delete", "Удалить", emoji: new DiscordComponentEmoji(DiscordEmoji.FromName(Program.Client, ":x:"))));
-				}).Result;
-			channel.ConfirmMessage.PinAsync().Wait();
+			SendConfirmMessage(channel);
 
 			InitDiscuss(channel);
 			DiscussionCreated?.Invoke(channel, ctx.Member);
@@ -104,6 +99,17 @@ namespace CGZBot2.Handlers
 			return Task.CompletedTask;
 		}
 
+		public void SendConfirmMessage(DiscussionChannel channel)
+		{
+			channel.ConfirmMessage = channel.Channel.SendMessageAsync(s =>
+			{
+				s.WithContent("Данный канал не подтверждён админстрацией сервера.\nКанал может быть удалён или переименнован в будущем");
+				s.AddComponents(new DiscordButtonComponent(ButtonStyle.Primary, "ok", "Подтвердить", emoji: new DiscordComponentEmoji(DiscordEmoji.FromName(Program.Client, ":white_check_mark:"))),
+					new DiscordButtonComponent(ButtonStyle.Secondary, "delete", "Удалить", emoji: new DiscordComponentEmoji(DiscordEmoji.FromName(Program.Client, ":x:"))));
+			}).Result;
+			channel.ConfirmMessage.PinAsync().Wait();
+		}
+
 		public void InitDiscuss(DiscussionChannel discussion)
 		{
 			discussion.Confirmed += DisChannelConfirmHandler;
@@ -119,7 +125,7 @@ namespace CGZBot2.Handlers
 				return async () =>
 				{
 				restart:
-					var args = await Utils.WaitForButton(discussion.ConfirmMessage, btnid);
+					var args = await Utils.WaitForButton(() => discussion.ConfirmMessage, btnid);
 
 					var builder = new DiscordInteractionResponseBuilder().AsEphemeral(true);
 
@@ -198,6 +204,13 @@ namespace CGZBot2.Handlers
 			HandlerState.Set(typeof(DiscussionHandler), nameof(channels), channels);
 			args.Handled = true;
 
+			return Task.CompletedTask;
+		}
+
+		private Task OnMessageDeleted(DiscordClient _, MessageDeleteEventArgs args)
+		{
+			var dic = channels[args.Guild].Where(s => s.State == DiscussionChannel.ConfirmState.Undetermined).ToDictionary(s => s.ConfirmMessage, s => s);
+			if(dic.ContainsKey(args.Message)) SendConfirmMessage(dic[args.Message]);
 			return Task.CompletedTask;
 		}
 	}
