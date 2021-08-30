@@ -16,12 +16,13 @@ namespace CGZBot2.Entities
 		private DateTime? startDate;
 		private DateTime? finishDate;
 		private bool requestedRpUpdate;
-		private GameState startState = GameState.Created;
 		private readonly StateMachine<GameState> stateMachine = new();
 
 
 		public TeamGame(DiscordMember creator, string name, string description, int membersCount)
 		{
+			stateMachine.SetStartState(GameState.Created);
+
 			Creator = creator;
 			GameName = name;
 			Description = description;
@@ -78,7 +79,7 @@ namespace CGZBot2.Entities
 
 		public bool NeedReportUpdate => State != ReportMessageType || requestedRpUpdate;
 
-		public GameState State { get => stateMachine.CurrentState; init => startState = value; }
+		public GameState State { get => stateMachine.CurrentState; init => stateMachine.SetStartState(value); }
 
 		public DateTime CreationDate { get; init; } = DateTime.Now;
 
@@ -122,7 +123,7 @@ namespace CGZBot2.Entities
 			stateMachine.CreateTransit(CreatorWaitWorker, GameState.WaitingForCreator, GameState.Running);
 			stateMachine.CreateTransit(GameEndWorker, GameState.Running, GameState.Finished);
 
-			stateMachine.Run(startState);
+			stateMachine.Run();
 		}
 	}
 }

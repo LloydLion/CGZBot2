@@ -81,6 +81,7 @@ namespace CGZBot2
 
 			Thread.Sleep(10000);
 			Connected = true;
+
 			Thread.Sleep(-1);
 		}
 	}

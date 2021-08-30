@@ -1,5 +1,6 @@
 ﻿using DSharpPlus;
 using DSharpPlus.Entities;
+using DSharpPlus.Exceptions;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -64,6 +65,20 @@ namespace CGZBot2
 		public static DiscordMessage SendDicertMessage(this DiscordMember user, string content)
 		{
 			return user.CreateDmChannelAsync().Result.SendMessageAsync(s => s.WithContent(content)).Result;
+		}
+
+		public static bool IsExist(this DiscordMessage msg)
+		{
+			try
+			{
+				msg.GetReactionsAsync(DiscordEmoji.FromName(Program.Client, ":ok_hand:")).Wait();
+				return true;
+			}
+			catch(AggregateException ex)
+			{
+				if (ex.InnerException is NotFoundException) return false;
+				else throw;
+			}
 		}
 	}
 }

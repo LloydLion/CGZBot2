@@ -5,7 +5,9 @@ using DSharpPlus;
 using DSharpPlus.CommandsNext;
 using DSharpPlus.CommandsNext.Attributes;
 using DSharpPlus.Entities;
+using DSharpPlus.EventArgs;
 using DSharpPlus.Interactivity.Extensions;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -31,18 +33,27 @@ namespace CGZBot2.Handlers
 
 		public StreamingHandler()
 		{
+			Program.Client.MessageDeleted += OnMessageDeleted;
+
 			foreach (var l in announcedStreams)
 			{	
 				foreach (var stream in l.Value)
 				{
-					var tmp = stream;
 					lock (stream.SyncRoot)
 					{
-						InitStream(tmp);
+						InitStream(stream);
 					}
 				}
 
 				UpdateReports(l.Key);
+
+				foreach (var stream in l.Value)
+				{
+					lock (stream.SyncRoot)
+					{
+						stream.Run();
+					}
+				}
 			}
 		}
 
@@ -88,7 +99,9 @@ namespace CGZBot2.Handlers
 				StreamCreated?.Invoke(stream);
 
 				announcedStreams[ctx].Add(stream);
-				UpdateReports(ctx.Guild);
+				UpdateReport(stream);
+
+				stream.Run();
 			}
 
 			return Task.CompletedTask;
@@ -149,7 +162,7 @@ namespace CGZBot2.Handlers
 			}
 
 			stream.RequestReportMessageUpdate();
-			UpdateReports(ctx.Guild);
+			UpdateReport(stream);
 		}
 
 		[HelpUseLimits(CommandUseLimit.Private)]
@@ -175,77 +188,106 @@ namespace CGZBot2.Handlers
 			return Task.CompletedTask;
 		}
 
+		private void UpdateReport(AnnouncedStream stream, bool clear = true)
+		{
+			try
+			{
+				var channel = announceChannel[stream.Guild];
+
+				if (clear)
+				{
+					var nonDel = announcedStreams[stream.Guild].Select(s => s.ReportMessage).ToList();
+
+					var msgs = channel.GetMessagesAsync(1000).Result;
+					var toDel = msgs.Where(s => !nonDel.Contains(s));
+					foreach (var msg in toDel) { msg.TryDelete(); Thread.Sleep(50); }
+				}
+
+				if (!stream.NeedReportUpdate) return;
+
+				lock (stream.SyncRoot)
+				{
+					var builder = new DiscordEmbedBuilder();
+					var msgbuilder = new DiscordMessageBuilder();
+
+					if (stream.State.HasFlag(AnnouncedStream.StreamState.Announced))
+					{
+						builder
+							.WithColor(DiscordColor.Cyan)
+							.WithTimestamp(stream.CreationDate)
+							.WithAuthor(stream.Creator.DisplayName, iconUrl: stream.Creator.AvatarUrl)
+							.WithTitle("Аннонс стрима")
+							.AddField("Название", stream.Name)
+							.AddField("Время провидения", stream.StartDate.ToString())
+							.AddField("Место", stream.PlaceType == AnnouncedStream.StreamingPlaceType.Discord ?
+								$"В дискорд канале {stream.Place}" : stream.Place);
+
+						if (stream.State == AnnouncedStream.StreamState.WaitingForStreamer)
+							msgbuilder.AddComponents(new DiscordButtonComponent(ButtonStyle.Primary, "start", "Начать стрим",
+								emoji: new DiscordComponentEmoji(DiscordEmoji.FromName(Program.Client, ":arrow_forward:"))));
+					}
+					else if (stream.State == AnnouncedStream.StreamState.Running)
+					{
+						builder
+							.WithColor(DiscordColor.Blurple)
+							.WithTimestamp(stream.RealStartDate)
+							.WithAuthor(stream.Creator.DisplayName, iconUrl: stream.Creator.AvatarUrl)
+							.WithTitle("Стрим начат")
+							.AddField("Название", stream.Name)
+							.AddField("Время провидения", stream.StartDate.ToString())
+							.AddField("Место", stream.PlaceType == AnnouncedStream.StreamingPlaceType.Discord ?
+								$"В дискорд канале {stream.Place}" : stream.Place);
+
+						msgbuilder.AddComponents(new DiscordButtonComponent(ButtonStyle.Primary, "stop", "Завершить стрим",
+							emoji: new DiscordComponentEmoji(DiscordEmoji.FromName(Program.Client, ":x:"))));
+
+						if (stream.PlaceType == AnnouncedStream.StreamingPlaceType.Internet)
+						{
+							msgbuilder.AddComponents(new DiscordLinkButtonComponent(stream.Place, "Смотреть стрим",
+								emoji: new DiscordComponentEmoji(DiscordEmoji.FromName(Program.Client, ":earth_africa:"))));
+						}
+					}
+					else return;
+
+					msgbuilder.AddEmbed(builder.Build());
+
+					if (stream.ReportMessage == null || !stream.ReportMessage.IsExist())
+						stream.ReportMessage = channel.SendMessageAsync(msgbuilder).Result;
+					else
+						stream.ReportMessage = stream.ReportMessage.ModifyAsync(msgbuilder).Result;
+				}
+			}
+			catch (Exception ex)
+			{
+				Program.Client.Logger.Log(LogLevel.Warning, ex, "Exception while updating report in UpdateReport for StreamingHandler");
+			}
+			finally
+			{
+				stream.ReportMessageType = stream.State;
+				stream.ResetReportUpdate();
+			}
+		}
+
 		private void UpdateReports(DiscordGuild guild)
 		{
-			lock (guild)
+			try
 			{
-				var channel = announceChannel[guild];
-
-				var nonDel = announcedStreams[guild].Select(s => s.ReportMessage).ToList();
-
-				var msgs = channel.GetMessagesAsync(1000).Result;
-				var toDel = msgs.Where(s => !nonDel.Contains(s));
-				foreach (var msg in toDel) { msg.TryDelete(); Thread.Sleep(50); }
+				if (Monitor.IsEntered(guild))
+					Program.Client.Logger.Log(LogLevel.Information, "UpdateReports in StreamingHandler called twice");
+				else Monitor.Enter(guild);
 
 				foreach (var stream in announcedStreams[guild])
 				{
-					lock (stream.SyncRoot)
-					{
-						if (!stream.NeedReportUpdate) continue;
-
-						var builder = new DiscordEmbedBuilder();
-						var msgbuilder = new DiscordMessageBuilder();
-
-						if (stream.State.HasFlag(AnnouncedStream.StreamState.Announced))
-						{
-							builder
-								.WithColor(DiscordColor.Cyan)
-								.WithTimestamp(stream.CreationDate)
-								.WithAuthor(stream.Creator.DisplayName, iconUrl: stream.Creator.AvatarUrl)
-								.WithTitle("Аннонс стрима")
-								.AddField("Название", stream.Name)
-								.AddField("Время провидения", stream.StartDate.ToString())
-								.AddField("Место", stream.PlaceType == AnnouncedStream.StreamingPlaceType.Discord ?
-									$"В дискорд канале {stream.Place}" : stream.Place);
-
-							if (stream.State == AnnouncedStream.StreamState.WaitingForStreamer)
-								msgbuilder.AddComponents(new DiscordButtonComponent(ButtonStyle.Primary, "start", "Начать стрим",
-									emoji: new DiscordComponentEmoji(DiscordEmoji.FromName(Program.Client, ":arrow_forward:"))));
-						}
-						else if (stream.State == AnnouncedStream.StreamState.Running)
-						{
-							builder
-								.WithColor(DiscordColor.Blurple)
-								.WithTimestamp(stream.RealStartDate)
-								.WithAuthor(stream.Creator.DisplayName, iconUrl: stream.Creator.AvatarUrl)
-								.WithTitle("Стрим начат")
-								.AddField("Название", stream.Name)
-								.AddField("Время провидения", stream.StartDate.ToString())
-								.AddField("Место", stream.PlaceType == AnnouncedStream.StreamingPlaceType.Discord ?
-									$"В дискорд канале {stream.Place}" : stream.Place);
-
-							msgbuilder.AddComponents(new DiscordButtonComponent(ButtonStyle.Primary, "stop", "Завершить стрим",
-								emoji: new DiscordComponentEmoji(DiscordEmoji.FromName(Program.Client, ":x:"))));
-
-							if(stream.PlaceType == AnnouncedStream.StreamingPlaceType.Internet)
-							{
-								msgbuilder.AddComponents(new DiscordLinkButtonComponent(stream.Place, "Смотреть стрим",
-									emoji: new DiscordComponentEmoji(DiscordEmoji.FromName(Program.Client, ":x:"))));
-							}
-						}
-						else continue;
-
-						msgbuilder.AddEmbed(builder.Build());
-
-						if (stream.ReportMessage == null)
-							stream.ReportMessage = channel.SendMessageAsync(msgbuilder).Result;
-						else
-							stream.ReportMessage = stream.ReportMessage.ModifyAsync(msgbuilder).Result;
-
-						stream.ReportMessageType = stream.State;
-						stream.ResetReportUpdate();
-					}
+					UpdateReport(stream);
 				}
+			}
+			catch (Exception ex)
+			{
+				Program.Client.Logger.Log(LogLevel.Warning, ex, "Exception while updating reportS in UpdateReportS for StreamingHandler");
+			}
+			finally
+			{
+				if (Monitor.IsEntered(guild)) Monitor.Exit(guild);
 			}
 		}
 
@@ -259,8 +301,6 @@ namespace CGZBot2.Handlers
 			stream.StartWorker = new PredicateTransitWorker<AnnouncedStream.StreamState>(s => StartWaitPredicate(stream));
 			stream.StreamerWaitWorker = new TaskTransitWorker<AnnouncedStream.StreamState>(waitButton("start"), true);
 			stream.StreamEndWorker = new TaskTransitWorker<AnnouncedStream.StreamState>(waitButton("stop"), true);
-
-			stream.Run();
 
 			Func<Task> waitButton(string btnid)
 			{
@@ -277,13 +317,19 @@ namespace CGZBot2.Handlers
 						if (member != stream.Creator)
 						{
 							builder.WithContent("Вы не создатель стрима");
-							args.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, builder).Wait();
+							try { args.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, builder).Wait(); } catch(Exception ex)
+							{
+								Program.Client.Logger.Log(LogLevel.Warning, ex, "Exception while sending interaction responce");
+							}
 							goto restart;
 						}
 						else
 						{
 							builder.WithContent("Успешно");
-							args.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, builder).Wait();
+							try { args.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, builder).Wait(); } catch(Exception ex)
+							{
+								Program.Client.Logger.Log(LogLevel.Warning, ex, "Exception while sending interaction responce");
+							}
 						}
 					});
 				};
@@ -317,28 +363,40 @@ namespace CGZBot2.Handlers
 		{
 			stream.Creator.SendDicertMessage($"Напоминание о трансляции \"{stream.Name}\", мы ждём только вас");
 
-			UpdateReports(stream.Guild);
+			UpdateReport(stream);
 
 			HandlerState.Set(typeof(StreamingHandler), nameof(announcedStreams), announcedStreams);
 		}
 
 		private void StartedStreamHandler(AnnouncedStream stream)
 		{
-			UpdateReports(stream.Guild);
+			UpdateReport(stream);
 			HandlerState.Set(typeof(StreamingHandler), nameof(announcedStreams), announcedStreams);
 		}
 
 		private void FinishedStreamHandler(AnnouncedStream stream)
 		{
 			announcedStreams[stream.Guild].Remove(stream);
-			UpdateReports(stream.Guild);
+			UpdateReport(stream);
 			HandlerState.Set(typeof(StreamingHandler), nameof(announcedStreams), announcedStreams);
 		}
 
 		private void CanceledStreamHandler(AnnouncedStream stream)
 		{
-			UpdateReports(stream.Guild);
+			UpdateReport(stream);
 			HandlerState.Set(typeof(StreamingHandler), nameof(announcedStreams), announcedStreams);
+		}
+
+		private Task OnMessageDeleted(DiscordClient _, MessageDeleteEventArgs args)
+		{
+			var streams = announcedStreams[args.Guild].Where(s => s.ReportMessage != null).ToDictionary(s => s.ReportMessage);
+			if (streams.ContainsKey(args.Message))
+			{
+				streams[args.Message].RequestReportMessageUpdate();
+				UpdateReport(streams[args.Message]);
+			}
+
+			return Task.CompletedTask;
 		}
 	}
 }

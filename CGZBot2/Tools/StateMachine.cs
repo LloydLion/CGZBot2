@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Extensions.Logging;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -16,6 +17,7 @@ namespace CGZBot2.Tools
 		private bool canceled = false;
 		private Task stateUpdateTask;
 		private bool disposed;
+		private bool started;
 
 
 		public TState CurrentState { get { return currentState; } }
@@ -55,14 +57,37 @@ namespace CGZBot2.Tools
 
 		public void Run(TState startState)
 		{
+			if (started) throw new InvalidOperationException("Can't start machine twice");
+
 			lock(SyncRoot)
 			{
-				hardSetState = currentState = startState;
+				SetStartState(startState);
+				Run();
+			}
+		}
 
+		public void Run()
+		{
+			if (started) throw new InvalidOperationException("Can't start machine twice");
+
+			lock (SyncRoot)
+			{
 				foreach (var transit in Transits)
 					transit.Worker.Start(transit, this);
 
 				stateUpdateTask.Start();
+
+				started = true;
+			}
+		}
+
+		public void SetStartState(TState state)
+		{
+			if (started) throw new InvalidOperationException("Can't set start state after start");
+
+			lock (SyncRoot)
+			{
+				hardSetState = currentState = state;
 			}
 		}
 
@@ -104,13 +129,44 @@ namespace CGZBot2.Tools
 			var trans = transits.Get(currentState);
 			foreach (var tran in trans)
 			{
-				if(tran.Worker.ReadyToTransit)
+				bool rtt = false;
+				try
+				{
+					rtt = tran.Worker.ReadyToTransit;
+				}
+				catch(Exception ex)
+				{
+					Program.Client.Logger.Log(LogLevel.Warning, ex, "Exception in state machine while getting transit status of {0}", tran.GetType().FullName);
+				}
+
+
+				if(rtt)
 				{
 					transitRecords.Add(new StateTransitRecord()
 						{ Transit = tran, LocalTime = DateTime.Now, OriginState = tran.OriginState, TargetState = tran.TargetState });
 					hardSetState = currentState = tran.TargetState;
-					foreach (var u in trans) u.Worker.Reset();
-					StateChanged?.Invoke(this);
+
+					foreach (var u in trans)
+					{
+						try
+						{
+							u.Worker.Reset();
+						}
+						catch(Exception ex)
+						{
+							Program.Client.Logger.Log(LogLevel.Warning, ex, "Exception in state machine while resetting transit worker {0}", tran.GetType().FullName);
+						}
+					}
+
+					try
+					{
+						StateChanged?.Invoke(this);
+					}
+					catch(Exception ex)
+					{
+						Program.Client.Logger.Log(LogLevel.Warning, ex, "Exception in event handler of state machine (switching to state - {0})", CurrentState.ToString());
+					}
+
 					UpdateStateDirect();
 					return;
 				}

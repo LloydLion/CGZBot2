@@ -13,7 +13,6 @@ namespace CGZBot2.Entities
 	{
 		private DateTime? realStartDate;
 		private DateTime? finishDate;
-		private StreamState startState = StreamState.Announced;
 		private bool requestedRpUpdate;
 		private StateMachine<StreamState> stateMachine = new();
 
@@ -21,6 +20,8 @@ namespace CGZBot2.Entities
 		public AnnouncedStream(string name, DiscordMember creator, DateTime startDate,
 			string place, StreamingPlaceType placeType)
 		{
+			stateMachine.SetStartState(StreamState.Announced);
+
 			Name = name;
 			Creator = creator;
 			StartDate = startDate;
@@ -63,7 +64,7 @@ namespace CGZBot2.Entities
 
 		public ITransitWorker<StreamState> StreamEndWorker { get; set; }
 
-		public StreamState State { get => stateMachine.CurrentState; init => startState = value; }
+		public StreamState State { get => stateMachine.CurrentState; init => stateMachine.SetStartState(value); }
 
 		public DateTime CreationDate { get; init; } = DateTime.Now;
 
@@ -100,7 +101,7 @@ namespace CGZBot2.Entities
 			stateMachine.CreateTransit(StreamerWaitWorker, StreamState.WaitingForStreamer, StreamState.Running);
 			stateMachine.CreateTransit(StreamEndWorker, StreamState.Running, StreamState.Finished);
 
-			stateMachine.Run(startState);
+			stateMachine.Run();
 		}
 
 

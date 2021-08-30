@@ -5,7 +5,9 @@ using DSharpPlus;
 using DSharpPlus.CommandsNext;
 using DSharpPlus.CommandsNext.Attributes;
 using DSharpPlus.Entities;
+using DSharpPlus.EventArgs;
 using DSharpPlus.Interactivity.Extensions;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -37,17 +39,27 @@ namespace CGZBot2.Handlers
 
 		public GameHandler()
 		{
+			Program.Client.MessageDeleted += OnMessageDeleted;
+
 			foreach (var l in startedGames)
 			{
 				foreach (var game in l.Value)
 				{
-					lock(game.SyncRoot)
+					lock (game.SyncRoot)
 					{
 						InitGame(game);
 					}
 				}
 
 				UpdateReports(l.Key);
+
+				foreach (var game in l.Value)
+				{
+					lock (game.SyncRoot)
+					{
+						game.Run();
+					}
+				}
 			}
 		}
 
@@ -87,8 +99,9 @@ namespace CGZBot2.Handlers
 				GameCreated?.Invoke(game);
 
 				startedGames[ctx].Add(game);
-				UpdateReports(ctx.Guild);
+				UpdateReport(game);
 
+				game.Run();
 			}
 
 			return Task.CompletedTask;
@@ -156,7 +169,7 @@ namespace CGZBot2.Handlers
 			}
 
 			game.RequestReportMessageUpdate();
-			UpdateReports(ctx.Guild);
+			UpdateReport(game);
 		}
 
 		[HelpUseLimits(CommandUseLimit.Private)]
@@ -170,7 +183,7 @@ namespace CGZBot2.Handlers
 
 			game.Invited.Clear();
 			game.RequestReportMessageUpdate();
-			UpdateReports(game.Guild);
+			UpdateReport(game);
 			return Task.CompletedTask;
 		}
 
@@ -186,7 +199,7 @@ namespace CGZBot2.Handlers
 
 			game.Invited.AddRange(invited);
 			game.RequestReportMessageUpdate();
-			UpdateReports(game.Guild);
+			UpdateReport(game);
 			return Task.CompletedTask;
 		}
 
@@ -222,7 +235,7 @@ namespace CGZBot2.Handlers
 
 			game.Invited.AddRange(party.Members);
 			game.RequestReportMessageUpdate();
-			UpdateReports(game.Guild);
+			UpdateReport(game);
 			return Task.CompletedTask;
 		}
 
@@ -394,8 +407,6 @@ namespace CGZBot2.Handlers
 			game.WaitingForCreator += WaitingForCreatorGameHandler;
 			game.StateMachine.StateChanged += (a) => GameStateChangedHandler(game);
 
-			game.Run();
-
 			Func<Task> waitButton(string btnid)
 			{
 				return () =>
@@ -411,13 +422,20 @@ namespace CGZBot2.Handlers
 						if (member != game.Creator)
 						{
 							builder.WithContent("Вы не создатель игры");
-							args.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, builder).Wait();
+							try { args.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, builder).Wait(); } catch(Exception ex)
+							{
+								Program.Client.Logger.Log(LogLevel.Warning, ex, "Exception while sending interaction responce");
+							}
+
 							goto restart;
 						}
 						else
 						{
 							builder.WithContent("Успешно");
-							args.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, builder).Wait();
+							try { args.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, builder).Wait(); } catch(Exception ex)
+							{
+								Program.Client.Logger.Log(LogLevel.Warning, ex, "Exception while sending interaction responce");
+							}
 						}
 					});
 				};
@@ -466,80 +484,106 @@ namespace CGZBot2.Handlers
 			return partiesSel.Single();
 		}
 
+		private void UpdateReport(TeamGame game, bool clear = true)
+		{
+			try
+			{
+				var channel = reportChannel[game.Guild];
+
+				if (clear)
+				{
+					var nonDel = startedGames[game.Guild].Select(s => s.ReportMessage).ToList();
+
+					var msgs = channel.GetMessagesAsync(1000).Result;
+					var toDel = msgs.Where(s => !nonDel.Contains(s));
+					foreach (var msg in toDel) { msg.TryDelete(); Thread.Sleep(50); }
+				}
+
+				if (!game.NeedReportUpdate) return;
+
+				lock (game.SyncRoot)
+				{
+					var builder = new DiscordEmbedBuilder();
+					var msgbuilder = new DiscordMessageBuilder();
+
+					if (game.State.HasFlag(TeamGame.GameState.Created))
+					{
+						builder
+							.WithColor(DiscordColor.DarkRed)
+							.WithAuthor(game.Creator.DisplayName, iconUrl: game.Creator.AvatarUrl)
+							.WithTitle("Игра в " + game.GameName)
+							.AddField("Запуск при", "присоединении " + game.TargetMembersCount + " участников" + (game.ReqAllInvited ? " и всех приглашённых" : ""))
+							.WithTimestamp(game.CreationDate);
+
+						var invStr = string.Join(", ", game.Invited.Select(s => s.Mention));
+						if (!string.IsNullOrWhiteSpace(invStr)) builder.AddField("Приглашены", invStr);
+						if (!string.IsNullOrWhiteSpace(game.Description)) builder.AddField("Описание", game.Description);
+
+						msgbuilder.AddComponents(new DiscordButtonComponent(ButtonStyle.Primary, "start", "Начать игру",
+							game.State == TeamGame.GameState.Created, new DiscordComponentEmoji(DiscordEmoji.FromName(Program.Client, ":arrow_forward:"))));
+					}
+					else if (game.State == TeamGame.GameState.Running)
+					{
+						builder
+							.WithColor(DiscordColor.HotPink)
+							.WithAuthor(game.Creator.DisplayName, iconUrl: game.Creator.AvatarUrl)
+							.WithTitle("Игра в " + game.GameName + " начата")
+							.AddField("Участники", string.Join(", ", game.TeamMembers.Select(s => s.Mention)))
+							.WithTimestamp(game.StartDate);
+
+						msgbuilder.AddComponents(new DiscordButtonComponent(ButtonStyle.Primary, "stop", "Завершить игру", emoji: new DiscordComponentEmoji(DiscordEmoji.FromName(Program.Client, ":x:"))));
+					}
+					else return;
+					msgbuilder.AddEmbed(builder.Build());
+
+					if (game.ReportMessage == null || !game.ReportMessage.IsExist())
+						game.ReportMessage = channel.SendMessageAsync(msgbuilder).Result;
+					else
+						game.ReportMessage = game.ReportMessage.ModifyAsync(msgbuilder).Result;
+
+
+					if (game.State.HasFlag(TeamGame.GameState.Created))
+						game.ReportMessage.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":ok_hand:"));
+
+				}
+			}
+			catch(Exception ex)
+			{
+				Program.Client.Logger.Log(LogLevel.Warning, ex, "Exception while updating report in UpdateReport for GameHandler");
+			}
+			finally
+			{
+				game.ReportMessageType = game.State;
+				game.ResetReportUpdate();
+			}
+		}
+
 		private void UpdateReports(DiscordGuild guild)
 		{
-			lock (guild)
+			try
 			{
-
-				var channel = reportChannel[guild];
-
-				var nonDel = startedGames[guild].Select(s => s.ReportMessage).ToList();
-				var dic = startedGames[guild].Where(s => s.ReportMessage != null).ToDictionary(s => s.ReportMessage);
-
-				var msgs = channel.GetMessagesAsync(1000).Result;
-				var toDel = msgs.Where(s => !nonDel.Contains(s));
-				foreach (var msg in toDel) { msg.TryDelete(); Thread.Sleep(50); }
+				if (Monitor.IsEntered(guild))
+					Program.Client.Logger.Log(LogLevel.Information, "UpdateReports in GameHandler called twice");
+				else Monitor.Enter(guild);
 
 				foreach (var game in startedGames[guild])
 				{
-					if (!game.NeedReportUpdate) continue;
-
-					lock (game.SyncRoot)
-					{
-						var builder = new DiscordEmbedBuilder();
-						var msgbuilder = new DiscordMessageBuilder();
-
-						if (game.State.HasFlag(TeamGame.GameState.Created))
-						{
-							builder
-								.WithColor(DiscordColor.DarkRed)
-								.WithAuthor(game.Creator.DisplayName, iconUrl: game.Creator.AvatarUrl)
-								.WithTitle("Игра в " + game.GameName)
-								.AddField("Запуск при", "присоединении " + game.TargetMembersCount + " участников" + (game.ReqAllInvited ? " и всех приглашённых" : ""))
-								.WithTimestamp(game.CreationDate);
-
-							var invStr = string.Join(", ", game.Invited.Select(s => s.Mention));
-							if (!string.IsNullOrWhiteSpace(invStr)) builder.AddField("Приглашены", invStr);
-							if (!string.IsNullOrWhiteSpace(game.Description)) builder.AddField("Описание", game.Description);
-
-							msgbuilder.AddComponents(new DiscordButtonComponent(ButtonStyle.Primary, "start", "Начать игру",
-								game.State == TeamGame.GameState.Created, new DiscordComponentEmoji(DiscordEmoji.FromName(Program.Client, ":arrow_forward:"))));
-						}
-						else if (game.State == TeamGame.GameState.Running)
-						{
-							builder
-								.WithColor(DiscordColor.HotPink)
-								.WithAuthor(game.Creator.DisplayName, iconUrl: game.Creator.AvatarUrl)
-								.WithTitle("Игра в " + game.GameName + " начата")
-								.AddField("Участники", string.Join(", ", game.TeamMembers.Select(s => s.Mention)))
-								.WithTimestamp(game.StartDate);
-
-							msgbuilder.AddComponents(new DiscordButtonComponent(ButtonStyle.Primary, "stop", "Завершить игру", emoji: new DiscordComponentEmoji(DiscordEmoji.FromName(Program.Client, ":x:"))));
-						}
-						else continue;
-
-						msgbuilder.AddEmbed(builder.Build());
-
-						if (game.ReportMessage == null)
-							game.ReportMessage = channel.SendMessageAsync(msgbuilder).Result;
-						else
-							game.ReportMessage = game.ReportMessage.ModifyAsync(msgbuilder).Result;
-
-
-						if (game.State.HasFlag(TeamGame.GameState.Created))
-							game.ReportMessage.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":ok_hand:"));
-
-
-						game.ReportMessageType = game.State;
-						game.ResetReportUpdate();
-					}
+					UpdateReport(game);
 				}
+			}
+			catch (Exception ex)
+			{
+				Program.Client.Logger.Log(LogLevel.Warning, ex, "Exception while updating reportS in UpdateReportS for GameHandler");
+			}
+			finally
+			{
+				if (Monitor.IsEntered(guild)) Monitor.Exit(guild);
 			}
 		}
 
 		private void GameStateChangedHandler(TeamGame game)
 		{
-			UpdateReports(game.Guild);
+			UpdateReport(game);
 			HandlerState.Set(typeof(GameHandler), nameof(startedGames), startedGames);
 		}
 
@@ -551,8 +595,8 @@ namespace CGZBot2.Handlers
 			foreach (var member in game.TeamMembers)
 				member.SendDicertMessage($"Игра в {game.GameName} от {game.Creator.Mention} началась.");
 
-			var overs = new DiscordOverwriteBuilder[] { new DiscordOverwriteBuilder(game.Creator).Allow(DSharpPlus.Permissions.All) };
-			game.CreatedVoice = game.Guild.CreateChannelAsync("Игра в " + game.GameName, DSharpPlus.ChannelType.Voice,
+			var overs = new DiscordOverwriteBuilder[] { new DiscordOverwriteBuilder(game.Creator).Allow(Permissions.All) };
+			game.CreatedVoice = game.Guild.CreateChannelAsync("Игра в " + game.GameName, ChannelType.Voice,
 				voiceCreationCategory[game.Guild], overwrites: overs).Result;
 		}
 
@@ -595,8 +639,28 @@ namespace CGZBot2.Handlers
 
 		private DiscordMember[] GetEmoji(TeamGame game, string name)
 		{
-			return game.ReportMessage.GetReactionsAsync(DiscordEmoji.FromName(Program.Client, name)).Result
-				.Where(s => !s.IsBot).Select(s => game.Guild.GetMemberAsync(s.Id).Result).ToArray();
+			try
+			{
+				return game.ReportMessage.GetReactionsAsync(DiscordEmoji.FromName(Program.Client, name)).Result
+					.Where(s => !s.IsBot).Select(s => game.Guild.GetMemberAsync(s.Id).Result).ToArray();
+			}
+			catch(Exception ex)
+			{
+				Program.Client.Logger.Log(LogLevel.Warning, ex, "Exception while getting reactions of report message ({0})", game.ReportMessage?.Id.ToString() ?? "null");
+				return Array.Empty<DiscordMember>();
+			}
+		}
+
+		private Task OnMessageDeleted(DiscordClient _, MessageDeleteEventArgs args)
+		{
+			var reports = startedGames[args.Guild].Where(s => s.ReportMessage != null).ToDictionary(s => s.ReportMessage);
+			if (reports.ContainsKey(args.Message))
+			{
+				reports[args.Message].RequestReportMessageUpdate();
+				UpdateReport(reports[args.Message]);
+			}
+
+			return Task.CompletedTask;
 		}
 	}
 }
