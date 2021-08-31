@@ -18,7 +18,7 @@ namespace CGZBot2.Handlers
 			BotSettings.Load<List<ReputationRole>>(typeof(ReputationHandler), nameof(rpRoles));
 
 		private readonly GuildDictionary<List<MemberReputation>> reputation =
-			new() { DefaultValueFactory = () => new List<MemberReputation>() };
+			HandlerState.Get(typeof(ReputationHandler), nameof(reputation), () => new List<MemberReputation>());
 
 		private static readonly Dictionary<ActionType, int> rpGive = new()
 		{
@@ -67,6 +67,7 @@ namespace CGZBot2.Handlers
 						foreach (var member in l.Value)
 						{
 							member.RevokeReputation(20);
+							HandlerState.Set(typeof(ReputationHandler), nameof(reputation), reputation);
 						}
 					}
 				}
@@ -155,7 +156,7 @@ namespace CGZBot2.Handlers
 			if (rp < 0) rpobj.RevokeReputation(-rp);
 			else if(rp > 0) rpobj.GiveReputation(rp);
 
-			//HandlerState.Set(typeof(ReputationHandler), nameof(reputation), reputation);
+			HandlerState.Set(typeof(ReputationHandler), nameof(reputation), reputation);
 		}
 	}
 }
