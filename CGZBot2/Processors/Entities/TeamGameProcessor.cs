@@ -75,7 +75,7 @@ namespace CGZBot2.Processors.Entities
 			var startDateTicks = (long)root.ReadPrimitive("start date");
 			var finishDateTicks = (long)root.ReadPrimitive("end date");
 
-			var game = new TeamGame(creator, null, null, 0) { Invited = invited, TeamMembers = members, State = state,
+			var game = new TeamGame(creator, null, null, 0) { Invited = invited.ToHashSet(), TeamMembers = members.ToHashSet(), State = state,
 				CreationDate = createDate, StartDate = startDateTicks == -1 ? null : new DateTime(startDateTicks),
 				FinishDate = finishDateTicks == -1 ? null : new DateTime(finishDateTicks), CreatedVoice = voice
 			};

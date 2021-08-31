@@ -11,8 +11,8 @@ namespace CGZBot2.Entities
 {
 	class TeamGame
 	{
-		private readonly List<DiscordMember> members = new();
-		private readonly List<DiscordMember> invited = new();
+		private readonly HashSet<DiscordMember> members = new();
+		private readonly HashSet<DiscordMember> invited = new();
 		private DateTime? startDate;
 		private DateTime? finishDate;
 		private bool requestedRpUpdate;
@@ -61,7 +61,7 @@ namespace CGZBot2.Entities
 
 		public bool ReqAllInvited { get; set; }
 
-		public ICollection<DiscordMember> TeamMembers { get => members; init => ((IReadOnlyCollection<DiscordMember>)value).CopyTo(members); }
+		public ISet<DiscordMember> TeamMembers { get => members; init => ((IReadOnlyCollection<DiscordMember>)value).CopyTo(members); }
 
 		public string GameName { get; set; }
 
@@ -69,7 +69,7 @@ namespace CGZBot2.Entities
 
 		public int TargetMembersCount { get; set; }
 
-		public ICollection<DiscordMember> Invited { get => invited; set { invited.Clear(); ((IReadOnlyCollection<DiscordMember>)value).CopyTo(invited); } }
+		public ISet<DiscordMember> Invited { get => invited; set { invited.Clear(); ((IReadOnlyCollection<DiscordMember>)value).CopyTo(invited); } }
 
 		public ITransitWorker<GameState> MembersWaitWorker { get; set; }
 

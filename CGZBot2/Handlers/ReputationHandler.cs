@@ -37,6 +37,15 @@ namespace CGZBot2.Handlers
 
 		public ReputationHandler()
 		{
+			foreach (var l in reputation)
+			{
+				foreach (var rp in l.Value)
+				{
+					rp.LevelChanged += ReputationLevelChanged;
+				}
+			}
+
+
 			Program.Client.MessageCreated += (s, a) =>
 			{
 				if (a.Guild != null)

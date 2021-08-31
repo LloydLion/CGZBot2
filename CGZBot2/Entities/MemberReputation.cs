@@ -65,7 +65,7 @@ namespace CGZBot2.Entities
 				levelrp -= NextLevelCost;
 				lastrp += NextLevelCost;
 				level++;
-				LevelChanged.Invoke(this, 1);
+				LevelChanged?.Invoke(this, 1);
 			}
 		}
 	}

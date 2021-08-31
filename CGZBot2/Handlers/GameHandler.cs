@@ -90,7 +90,7 @@ namespace CGZBot2.Handlers
 				return Task.CompletedTask;
 			}
 
-			var game = new TeamGame(ctx.Member, name, description, targetMemberCount) { Invited = invites, ReqAllInvited = reqAllInvited };
+			var game = new TeamGame(ctx.Member, name, description, targetMemberCount) { Invited = invites.Distinct().ToHashSet(), ReqAllInvited = reqAllInvited };
 
 			lock (game.SyncRoot)
 			{
@@ -103,6 +103,8 @@ namespace CGZBot2.Handlers
 
 				game.Run();
 			}
+
+			ctx.RespondAsync("Игра запущена").TryDeleteAfter(8000);
 
 			return Task.CompletedTask;
 		}
@@ -119,7 +121,7 @@ namespace CGZBot2.Handlers
 			game.Cancel();
 
 			startedGames[ctx].Remove(game);
-			ctx.RespondAsync("Игра успешно отменёна").TryDeleteAfter(8000);
+			ctx.RespondAsync("Игра успешно отменена").TryDeleteAfter(8000);
 
 			return Task.CompletedTask;
 		}
@@ -168,6 +170,8 @@ namespace CGZBot2.Handlers
 					return;
 			}
 
+			ctx.RespondAsync("Игра изменена").TryDeleteAfter(8000);
+
 			game.RequestReportMessageUpdate();
 			UpdateReport(game);
 		}
@@ -182,6 +186,9 @@ namespace CGZBot2.Handlers
 			if (game == null) return Task.CompletedTask;
 
 			game.Invited.Clear();
+
+			ctx.RespondAsync("Приглашения очищены").TryDeleteAfter(8000);
+
 			game.RequestReportMessageUpdate();
 			UpdateReport(game);
 			return Task.CompletedTask;
@@ -198,6 +205,9 @@ namespace CGZBot2.Handlers
 			if (game == null) return Task.CompletedTask;
 
 			game.Invited.AddRange(invited);
+
+			ctx.RespondAsync("Приглашения добавлены").TryDeleteAfter(8000);
+
 			game.RequestReportMessageUpdate();
 			UpdateReport(game);
 			return Task.CompletedTask;
@@ -217,6 +227,8 @@ namespace CGZBot2.Handlers
 				member.SendDicertMessage($"Вы были приглашены на игру в {game.GameName} на сервере {game.Guild.Name} от {game.Creator.Mention}\r\n" + game.ReportMessage.JumpLink);
 			}
 
+			ctx.RespondAsync("Приглашения отправлены").TryDeleteAfter(8000);
+
 			return Task.CompletedTask;
 		}
 
@@ -234,6 +246,9 @@ namespace CGZBot2.Handlers
 			if (party == null) return Task.CompletedTask;
 
 			game.Invited.AddRange(party.Members);
+
+			ctx.RespondAsync("Пати приглашено").TryDeleteAfter(8000);
+
 			game.RequestReportMessageUpdate();
 			UpdateReport(game);
 			return Task.CompletedTask;
@@ -272,7 +287,7 @@ namespace CGZBot2.Handlers
 			if (party == null) return Task.CompletedTask;
 
 			parties[ctx].Remove(party);
-			ctx.RespondAsync("Пати успешно удалён").TryDeleteAfter(8000);
+			ctx.RespondAsync("Пати успешно удалено").TryDeleteAfter(8000);
 
 			return Task.CompletedTask;
 		}
@@ -339,7 +354,18 @@ namespace CGZBot2.Handlers
 			var party = GetParty(ctx, partyName);
 			if (party == null) return Task.CompletedTask;
 
-			party.Creator.SendDicertMessage($"Отправлен запрос на присоединение к пати {party.Name} на сервере {party.Creator.Guild.Name} от {ctx.Member.Mention}");
+
+			if (party.Members.Contains(ctx.Member))
+			{
+				ctx.RespondAsync("Вы уже состоите в этом пати").TryDeleteAfter(8000);
+			}
+			else
+			{				
+				party.Creator.SendDicertMessage($"Запрос на присоединение к пати {party.Name} на сервере {party.Creator.Guild.Name} от {ctx.Member.Mention}\r\n/join-party \"{party.Name}\" {ctx.Member.Mention}");
+
+				ctx.RespondAsync("Запрос отправлен").TryDeleteAfter(8000);
+			}
+
 			return Task.CompletedTask;
 		}
 
@@ -544,6 +570,8 @@ namespace CGZBot2.Handlers
 
 					if (game.State.HasFlag(TeamGame.GameState.Created))
 						game.ReportMessage.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":ok_hand:"));
+					else if (game.State == TeamGame.GameState.Running)
+						game.ReportMessage.DeleteAllReactionsAsync();
 
 				}
 			}

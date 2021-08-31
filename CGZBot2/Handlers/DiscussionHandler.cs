@@ -61,6 +61,8 @@ namespace CGZBot2.Handlers
 			InitDiscuss(channel);
 			DiscussionCreated?.Invoke(channel, ctx.Member);
 
+			ctx.RespondAsync("Канал создан").TryDeleteAfter(8000);
+
 			return Task.CompletedTask;
 		}
 
@@ -79,6 +81,10 @@ namespace CGZBot2.Handlers
 				ctx.RespondAsync("У вас не достаточно прав для этой операции (Управление каналами)").TryDeleteAfter(8000);
 				return Task.CompletedTask;
 			}
+
+			ctx.RespondAsync("Дисскуссия закрыта").TryDeleteAfter(8000);
+
+			Thread.Sleep(3000);
 
 			channel.Delete();
 
