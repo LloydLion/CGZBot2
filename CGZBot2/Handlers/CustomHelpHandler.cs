@@ -5,6 +5,7 @@ using DSharpPlus.Entities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -23,7 +24,7 @@ namespace CGZBot2.Handlers
 			builder.AddField("Обозначения", "`command` - публичная комманда" +
 				"\r\n__`command`__ - комманда с условиями (см описание)" +
 				"\r\n***`command`*** - комманда для администрации");
-			builder.WithFooter("версия бота 2.0.0.0-dev");
+			builder.WithFooter("версия бота " + Assembly.GetEntryAssembly().GetName().Version.ToString());
 
 			var cn = Program.Client.GetCommandsNext();
 
