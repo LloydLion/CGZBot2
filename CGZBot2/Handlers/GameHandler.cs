@@ -40,6 +40,7 @@ namespace CGZBot2.Handlers
 		public GameHandler()
 		{
 			Program.Client.MessageDeleted += OnMessageDeleted;
+			Program.Client.ChannelDeleted += (s, a) => { if (a.Channel.Type == ChannelType.Voice) return OnVoiceChannelDeleted(s, a); else return Task.CompletedTask; };
 
 			foreach (var l in startedGames)
 			{
@@ -119,8 +120,33 @@ namespace CGZBot2.Handlers
 			if (game == null) return Task.CompletedTask;
 
 			game.Cancel();
-
 			startedGames[ctx].Remove(game);
+
+			ctx.RespondAsync("Игра успешно отменена").TryDeleteAfter(8000);
+
+			return Task.CompletedTask;
+		}
+
+		[HelpUseLimits(CommandUseLimit.Admins)]
+		[Command("cancel-game-hard")]
+		[Description("Отменяет любую игру")]
+		public Task CancelGame(CommandContext ctx,
+			[Description("Имя отменяймой игры")] string name,
+			[Description("Создатель")] DiscordMember creator)
+		{
+			if (!ctx.Member.Permissions.HasPermission(Permissions.ManageChannels))
+			{
+				ctx.RespondAsync("У вас не достаточно прав для этой операции (Управление каналами)").TryDeleteAfter(8000);
+				return Task.CompletedTask;
+			}
+
+
+			var game = GetGame(ctx, name, creator);
+			if (game == null) return Task.CompletedTask;
+
+			game.Cancel();
+			startedGames[ctx].Remove(game);
+
 			ctx.RespondAsync("Игра успешно отменена").TryDeleteAfter(8000);
 
 			return Task.CompletedTask;
@@ -281,9 +307,13 @@ namespace CGZBot2.Handlers
 		[Command("delete-party")]
 		[Description("Удаляет пати с сервера (только создатель)")]
 		public Task DeleteParty(CommandContext ctx,
-			[Description("Название пати")] string name)
+			[Description("Название пати")] string partyName)
 		{
-			var party = GetPartyPrivate(ctx, name);
+			MembersParty party;
+			if (ctx.Member.Permissions.HasPermission(Permissions.ManageChannels))
+				party = GetParty(ctx, partyName);
+			else party = GetPartyPrivate(ctx, partyName);
+
 			if (party == null) return Task.CompletedTask;
 
 			parties[ctx].Remove(party);
@@ -376,7 +406,11 @@ namespace CGZBot2.Handlers
 			[Description("Название пати")] string partyName,
 			[Description("Участник")] DiscordMember member)
 		{
-			var party = GetPartyPrivate(ctx, partyName);
+			MembersParty party;
+			if (ctx.Member.Permissions.HasPermission(Permissions.ManageChannels))
+				party = GetParty(ctx, partyName);
+			else party = GetPartyPrivate(ctx, partyName);
+
 			if (party == null) return Task.CompletedTask;
 
 			if (party.Creator == member)
@@ -404,7 +438,11 @@ namespace CGZBot2.Handlers
 			[Description("Название пати")] string partyName,
 			[Description("Участник")] DiscordMember member)
 		{
-			var party = GetPartyPrivate(ctx, partyName);
+			MembersParty party;
+			if (ctx.Member.Permissions.HasPermission(Permissions.ManageChannels))
+				party = GetParty(ctx, partyName);
+			else party = GetPartyPrivate(ctx, partyName);
+
 			if (party == null) return Task.CompletedTask;
 
 			if (party.Members.Contains(member))
@@ -415,6 +453,34 @@ namespace CGZBot2.Handlers
 			{
 				party.Members.Add(member);
 				ctx.RespondAsync("Участник успешно добавлен в пати").TryDeleteAfter(8000);
+			}
+
+			return Task.CompletedTask;
+		}
+
+		[HelpUseLimits(CommandUseLimit.Private)]
+		[Description("Удаляет вас из пати")]
+		[Command("exit-party")]
+		public Task ExitParty(CommandContext ctx,
+			[Description("Название пати")] string partyName)
+		{
+			var party = GetParty(ctx, partyName);
+
+			if (party == null) return Task.CompletedTask;
+
+			if (party.Creator == ctx.Member)
+			{
+				ctx.RespondAsync("Вы не можете уйти из пати т.к. вы создатель пати").TryDeleteAfter(8000);
+				return Task.CompletedTask;
+			}
+
+			if (party.Members.Remove(ctx.Member))
+			{
+				ctx.RespondAsync("Вы вышли из пати").TryDeleteAfter(8000);
+			}
+			else
+			{
+				ctx.RespondAsync("Вас нет в этом пати").TryDeleteAfter(8000);
 			}
 
 			return Task.CompletedTask;
@@ -468,13 +534,20 @@ namespace CGZBot2.Handlers
 			}
 		}
 
-		private TeamGame GetGame(CommandContext ctx, string gameName)
+		private TeamGame GetGame(CommandContext ctx, string gameName, DiscordMember creator = null)
 		{
-			var games = startedGames[ctx].Where(s => s.Creator == ctx.Member && s.GameName == gameName).ToArray();
+			bool admin = false;
+			if (creator == null) creator = ctx.Member;
+			else admin = true;
+
+			var games = startedGames[ctx].Where(s => s.Creator == creator && s.GameName == gameName).ToArray();
 
 			if (games.Length == 0)
 			{
-				ctx.RespondAsync("Такой игры не существует.\r\nПоиск шёл только среди **ваших** игр").TryDeleteAfter(8000);
+				if (!admin)
+					ctx.RespondAsync("Такой игры не существует.\r\nПоиск шёл только среди **ваших** игр").TryDeleteAfter(8000);
+				else
+					ctx.RespondAsync("Такой игры не существует.\r\nПоиск шёл среди **всех** игр").TryDeleteAfter(8000);
 				return null;
 			}
 
@@ -609,6 +682,13 @@ namespace CGZBot2.Handlers
 			}
 		}
 
+		private void CreateVoiceChannel(TeamGame game)
+		{
+			var overs = new DiscordOverwriteBuilder[] { new DiscordOverwriteBuilder(game.Creator).Allow(Permissions.All) };
+			game.CreatedVoice = game.Guild.CreateChannelAsync("Игра в " + game.GameName, ChannelType.Voice,
+				voiceCreationCategory[game.Guild], overwrites: overs).Result;
+		}
+
 		private void GameStateChangedHandler(TeamGame game)
 		{
 			UpdateReport(game);
@@ -623,9 +703,7 @@ namespace CGZBot2.Handlers
 			foreach (var member in game.TeamMembers)
 				member.SendDicertMessage($"Игра в {game.GameName} от {game.Creator.Mention} началась.");
 
-			var overs = new DiscordOverwriteBuilder[] { new DiscordOverwriteBuilder(game.Creator).Allow(Permissions.All) };
-			game.CreatedVoice = game.Guild.CreateChannelAsync("Игра в " + game.GameName, ChannelType.Voice,
-				voiceCreationCategory[game.Guild], overwrites: overs).Result;
+			CreateVoiceChannel(game);
 		}
 
 		private void WaitingForCreatorGameHandler(TeamGame game)
@@ -640,13 +718,14 @@ namespace CGZBot2.Handlers
 
 		private void FinishedGameHandler(TeamGame game)
 		{
-			game.CreatedVoice.DeleteAsync();
 			startedGames[game.Guild].Remove(game);
+			game.CreatedVoice.TryDelete();
 		}
 
 		private void CanceledGameHandler(TeamGame game)
 		{
 			startedGames[game.Guild].Remove(game);
+			game.CreatedVoice.TryDelete();
 		}
 
 		private bool MembersWaitPredicate(TeamGame game)
@@ -686,6 +765,18 @@ namespace CGZBot2.Handlers
 			{
 				reports[args.Message].RequestReportMessageUpdate();
 				UpdateReport(reports[args.Message]);
+			}
+
+			return Task.CompletedTask;
+		}
+
+		private Task OnVoiceChannelDeleted(DiscordClient _, ChannelDeleteEventArgs args)
+		{
+			var reports = startedGames[args.Guild].Where(s => s.CreatedVoice != null).ToDictionary(s => s.CreatedVoice);
+			if (reports.ContainsKey(args.Channel))
+			{
+				reports[args.Channel].RequestReportMessageUpdate();
+				CreateVoiceChannel(reports[args.Channel]);
 			}
 
 			return Task.CompletedTask;

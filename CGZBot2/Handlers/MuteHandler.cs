@@ -4,6 +4,8 @@ using DSharpPlus;
 using DSharpPlus.CommandsNext;
 using DSharpPlus.CommandsNext.Attributes;
 using DSharpPlus.Entities;
+using DSharpPlus.EventArgs;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -29,6 +31,8 @@ namespace CGZBot2.Handlers
 
 		public MuteHandler()
 		{
+			Program.Client.MessageDeleted += OnMessageDeleted;
+
 			foreach (var l in mutes)
 			{
 				foreach (var mute in l.Value)
@@ -147,35 +151,42 @@ namespace CGZBot2.Handlers
 
 		private void UpdateReports(DiscordGuild guild)
 		{
-			var muts = mutes[guild];
-			var channel = reportChannel[guild];
-
-			var rpMsgs = muts.Select(s => s.ReportMessage).ToList();
-			var toDel = channel.GetMessagesAsync().Result.Where(s => !rpMsgs.Contains(s));
-
-			foreach (var msg in toDel) msg.DeleteAsync().Wait();
-
-			foreach (var mut in muts)
+			try
 			{
-				lock (mut.MsgSyncRoot)
+				var muts = mutes[guild];
+				var channel = reportChannel[guild];
+
+				var rpMsgs = muts.Select(s => s.ReportMessage).ToList();
+				var toDel = channel.GetMessagesAsync().Result.Where(s => !rpMsgs.Contains(s));
+
+				foreach (var msg in toDel) msg.DeleteAsync().Wait();
+
+				foreach (var mut in muts)
 				{
-					if (!mut.NeedUpdateReport) continue;
+					lock (mut.MsgSyncRoot)
+					{
+						if (!mut.NeedUpdateReport) continue;
 
-					mut.ReportMessage?.DeleteAsync();
+						mut.ReportMessage?.DeleteAsync();
 
-					var builder = new DiscordEmbedBuilder();
+						var builder = new DiscordEmbedBuilder();
 
-					builder
-						.WithTitle("Участник замьючен")
-						.WithColor(DiscordColor.Purple)
-						.WithTimestamp(mut.StartTime)
-						.WithAuthor(mut.Member.DisplayName, iconUrl: mut.Member.AvatarUrl)
-						.AddField("Время мута", mut.Timeout?.ToString() ?? "Бессрочно")
-						.AddField("Время окончания", mut.EndTime?.ToString() ?? "Бессрочно")
-						.AddField("Причина", string.IsNullOrWhiteSpace(mut.Reason) ? "Не указана" : mut.Reason);
+						builder
+							.WithTitle("Участник замьючен")
+							.WithColor(DiscordColor.Purple)
+							.WithTimestamp(mut.StartTime)
+							.WithAuthor(mut.Member.DisplayName, iconUrl: mut.Member.AvatarUrl)
+							.AddField("Время мута", mut.Timeout?.ToString() ?? "Бессрочно")
+							.AddField("Время окончания", mut.EndTime?.ToString() ?? "Бессрочно")
+							.AddField("Причина", string.IsNullOrWhiteSpace(mut.Reason) ? "Не указана" : mut.Reason);
 
-					mut.ReportMessage = channel.SendMessageAsync(builder).Result;
+						mut.ReportMessage = channel.SendMessageAsync(builder).Result;
+					}
 				}
+			}
+			catch(Exception ex)
+			{
+				Program.Client.Logger.Log(LogLevel.Warning, ex, "Exception while updating reports in UpdateReports for MuteHandler");
 			}
 		}
 
@@ -214,6 +225,18 @@ namespace CGZBot2.Handlers
 			mutes[status.Guild].Remove(status);
 			UpdateReports(status.Guild);
 			HandlerState.Set(typeof(MuteHandler), nameof(mutes), mutes);
+		}
+
+		private Task OnMessageDeleted(DiscordClient _, MessageDeleteEventArgs args)
+		{
+			var reports = mutes[args.Guild].Where(s => s.ReportMessage != null).ToDictionary(s => s.ReportMessage);
+			if (reports.ContainsKey(args.Message))
+			{
+				reports[args.Message].RequestReportMessageUpdate();
+				UpdateReports(args.Guild);
+			}
+
+			return Task.CompletedTask;
 		}
 	}
 }

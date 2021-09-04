@@ -10,10 +10,16 @@ namespace CGZBot2.Entities
 {
 	class CreatedVoiceChannel
 	{
+		private bool hardClose = false;
+
+
 		public CreatedVoiceChannel(DiscordChannel channel, DiscordMember creator)
 		{
-			DeleteTask = new Task(() => { while (!Program.Connected || MemberCount > 0) Thread.Sleep(100);
-				Channel.DeleteAsync(); Deleted?.Invoke(this); });
+			DeleteTask = new Task(() =>
+			{
+				while (!Program.Connected || (!hardClose && Channel.IsExist() && MemberCount > 0)) Thread.Sleep(1000);
+				if (Channel.IsExist()) Channel.TryDelete(); Deleted?.Invoke(this);
+			});
 			Channel = channel;
 			Creator = creator;
 		}
@@ -32,10 +38,16 @@ namespace CGZBot2.Entities
 
 		public int MemberCount => Channel.Users.Count();
 
-		public DateTime CreationDate => Channel.CreationTimestamp.UtcDateTime;
+		public DateTime CreationDate => Channel.CreationTimestamp.LocalDateTime;
 
 		public string Name => Channel.Name;
 
 		public bool Closed => DeleteTask.IsCompleted;
+
+
+		public void Close()
+		{
+			hardClose = true;
+		}
 	}
 }

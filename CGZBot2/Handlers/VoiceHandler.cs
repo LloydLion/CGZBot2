@@ -3,6 +3,7 @@ using DSharpPlus;
 using DSharpPlus.CommandsNext;
 using DSharpPlus.CommandsNext.Attributes;
 using DSharpPlus.Entities;
+using DSharpPlus.EventArgs;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -104,6 +105,29 @@ namespace CGZBot2.Handlers
 			createdVoices[channel.Channel.Guild].Remove(channel);
 			UpdateReports(channel.Channel.Guild);
 			HandlerState.Set(typeof(VoiceHandler), nameof(createdVoices), createdVoices);
+		}
+
+		//private Task OnVoiceChannelDeleted(DiscordClient _, ChannelDeleteEventArgs args)
+		//{
+		//	var voices = createdVoices[args.Guild].Where(s => s.Channel != null).ToDictionary(s => s.Channel);
+		//	if (voices.ContainsKey(args.Channel))
+		//	{
+		//		voices[args.Channel].Close();
+		//	}
+
+		//	return Task.CompletedTask;
+		//}
+
+		private Task OnMessageDeleted(DiscordClient _, MessageDeleteEventArgs args)
+		{
+			var reports = createdVoices[args.Guild].Where(s => s.ReportMessage != null).ToDictionary(s => s.ReportMessage);
+			if (reports.ContainsKey(args.Message))
+			{
+				reports[args.Message].ReportMessage = null;
+				UpdateReports(args.Guild);
+			}
+
+			return Task.CompletedTask;
 		}
 	}
 }

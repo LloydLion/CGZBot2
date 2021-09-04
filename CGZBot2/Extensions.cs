@@ -17,6 +17,11 @@ namespace CGZBot2
 			try { msg.DeleteAsync().Wait(); } catch (Exception) { }
 		}
 
+		public static void TryDelete(this DiscordChannel channel)
+		{
+			try { channel.DeleteAsync().Wait(); } catch (Exception) { }
+		}
+
 		public static void TryDeleteAfter(this DiscordMessage msg, int timeout)
 		{
 			Task.Run(() =>
@@ -72,6 +77,20 @@ namespace CGZBot2
 			try
 			{
 				msg.GetReactionsAsync(DiscordEmoji.FromName(Program.Client, ":ok_hand:")).Wait();
+				return true;
+			}
+			catch(AggregateException ex)
+			{
+				if (ex.InnerException is NotFoundException) return false;
+				else throw;
+			}
+		}
+
+		public static bool IsExist(this DiscordChannel channel)
+		{
+			try
+			{
+				channel.ModifyAsync(s => { }).Wait();
 				return true;
 			}
 			catch(AggregateException ex)

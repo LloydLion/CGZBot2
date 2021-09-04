@@ -1,4 +1,5 @@
 ﻿using CGZBot2.Entities;
+using DSharpPlus;
 using DSharpPlus.CommandsNext;
 using DSharpPlus.CommandsNext.Attributes;
 using DSharpPlus.Entities;
@@ -105,6 +106,11 @@ namespace CGZBot2.Handlers
 			if (member == null) member = ctx.Member;
 			var rp = GetReputation(member);
 
+			if(rp == null)
+			{
+				ctx.RespondAsync("Для ботов и администраторов сервера подщёт репутации не производится").TryDeleteAfter(8000);
+			}
+
 			var builder = new DiscordEmbedBuilder();
 
 			builder
@@ -123,6 +129,8 @@ namespace CGZBot2.Handlers
 
 		private MemberReputation GetReputation(DiscordMember member)
 		{
+			if (member.IsBot || member.Permissions.HasPermission(Permissions.Administrator)) return null;
+
 			lock (reputation)
 			{
 				var mems = reputation[member.Guild].Where(s => s.Member == member).ToList();
@@ -161,6 +169,7 @@ namespace CGZBot2.Handlers
 		{
 			var rp = rpGive[action];
 			var rpobj = GetReputation(member);
+			if (rpobj == null) return;
 
 			if (rp < 0) rpobj.RevokeReputation(-rp);
 			else if(rp > 0) rpobj.GiveReputation(rp);
