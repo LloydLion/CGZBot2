@@ -126,27 +126,31 @@ namespace CGZBot2.Handlers
 
 			discussion.Run();
 
-			Func<Task> waitButton(string btnid)
+			Func<CancellationToken, Task> waitButton(string btnid)
 			{
-				return async () =>
+				return (token) =>
 				{
-				restart:
-					var args = await Utils.WaitForButton(() => discussion.ConfirmMessage, btnid);
-
-					var builder = new DiscordInteractionResponseBuilder().AsEphemeral(true);
-
-					var member = discussion.Guild.GetMemberAsync(args.User.Id).Result;
-					if (!member.PermissionsIn(discussion.Channel).HasPermission(Permissions.ManageChannels))
+					return new Task(() =>
 					{
-						builder.WithContent("У вас не достаточно прав для этой операции (Управление каналами)");
-						await args.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, builder);
-						goto restart;
-					}
-					else
-					{
-						builder.WithContent("Успешно");
-						await args.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, builder);
-					}
+					restart:
+						var args = Utils.WaitForButton(() => discussion.ConfirmMessage, btnid).StartAndWait().Result;
+						if (token.IsCancellationRequested) return;
+
+						var builder = new DiscordInteractionResponseBuilder().AsEphemeral(true);
+
+						var member = discussion.Guild.GetMemberAsync(args.User.Id).Result;
+						if (!member.PermissionsIn(discussion.Channel).HasPermission(Permissions.ManageChannels))
+						{
+							builder.WithContent("У вас не достаточно прав для этой операции (Управление каналами)");
+							args.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, builder).Wait();
+							goto restart;
+						}
+						else
+						{
+							builder.WithContent("Успешно");
+							args.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, builder).Wait();
+						}
+					}, token);
 				};
 			}
 		}

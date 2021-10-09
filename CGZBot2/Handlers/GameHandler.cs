@@ -499,14 +499,15 @@ namespace CGZBot2.Handlers
 			game.WaitingForCreator += WaitingForCreatorGameHandler;
 			game.StateMachine.StateChanged += (a) => GameStateChangedHandler(game);
 
-			Func<Task> waitButton(string btnid)
+			Func<CancellationToken, Task> waitButton(string btnid)
 			{
-				return () =>
+				return (token) =>
 				{
 					return new Task(() =>
 					{
 					restart:
-						var args = Utils.WaitForButton(() => game.ReportMessage, btnid).Result;
+						var args = Utils.WaitForButton(() => game.ReportMessage, btnid).StartAndWait().Result;
+						if (token.IsCancellationRequested) return;
 
 						var builder = new DiscordInteractionResponseBuilder().AsEphemeral(true);
 
@@ -529,7 +530,7 @@ namespace CGZBot2.Handlers
 								Program.Client.Logger.Log(LogLevel.Warning, ex, "Exception while sending interaction responce");
 							}
 						}
-					});
+					}, token);
 				};
 			}
 		}

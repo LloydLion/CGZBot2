@@ -14,15 +14,12 @@ namespace CGZBot2.Tools
 		private TState hardSetState;
 		private NotUniqueDictionary<TState, StateTransit> transits = new();
 		private List<StateTransitRecord> transitRecords = new();
-		private bool canceled = false;
 		private Task stateUpdateTask;
 		private bool disposed;
 		private bool started;
 
 
 		public TState CurrentState { get { return currentState; } }
-
-		public bool IsCanceled { get { return canceled; } }
 
 		public IReadOnlyCollection<StateTransitRecord> TransitRecords { get { return transitRecords; } }
 
@@ -102,6 +99,11 @@ namespace CGZBot2.Tools
 		{
 			transits.Add(origin, new StateTransit() { Worker = worker, OriginState = origin, TargetState = target });
 		}
+		
+		public void CreateTransit(StateTransit transit)
+		{
+			transits.Add(transit.OriginState, transit);
+		}
 
 		public void UpdateState()
 		{
@@ -111,9 +113,9 @@ namespace CGZBot2.Tools
 			}
 		}
 
-		public Task WaitForStateAsync(TState state)
+		public Task WaitForStateAsync(TState state, CancellationToken token = default)
 		{
-			return Task.Run(() => { do { lock (SyncRoot) { } Thread.Sleep(50); } while (!CurrentState.Equals(state)); });
+			return Task.Run(() => { do { lock (SyncRoot) { } Thread.Sleep(50); } while (!CurrentState.Equals(state) && !token.IsCancellationRequested); }, token);
 		}
 
 		private void UpdateStateDirect()
@@ -178,6 +180,20 @@ namespace CGZBot2.Tools
 			disposed = true;
 		}
 
+		public struct StateTransitFactory<TParam>
+		{
+			public Func<TParam, ITransitWorker<TState>> WorkerFactory { get; init; }
+
+			public TState OriginState { get; init; }
+
+			public TState TargetState { get; init; }
+
+
+			public StateTransit Fabricate(TParam param)
+			{
+				return new StateTransit() { OriginState = OriginState, TargetState = TargetState, Worker = WorkerFactory(param) };
+			}
+		}
 
 		public struct StateTransit
 		{
@@ -220,15 +236,16 @@ namespace CGZBot2.Tools
 
 	class TaskTransitWorker<TState> : ITransitWorker<TState> where TState : Enum
 	{
-		private readonly Func<Task> waitTaskFactory;
+		private readonly Func<CancellationToken, Task> waitTaskFactory;
 		private readonly bool singleTransit;
 		private bool transited;
 		private Task currentTask;
+		private CancellationTokenSource cts;
 		private StateMachine<TState>.StateTransit transit;
 		private StateMachine<TState> machine;
 
 
-		public TaskTransitWorker(Func<Task> waitTaskFactory, bool singleTransit = false)
+		public TaskTransitWorker(Func<CancellationToken, Task> waitTaskFactory, bool singleTransit = false)
 		{
 			this.waitTaskFactory = waitTaskFactory;
 			this.singleTransit = singleTransit;
@@ -253,16 +270,27 @@ namespace CGZBot2.Tools
 
 		private void ReCreateTask()
 		{
-			var task = waitTaskFactory();
+			if(cts != null) cts.Cancel();
+			cts = new CancellationTokenSource();
+			var token = cts.Token;
+
+			var task = waitTaskFactory(token);
 
 			currentTask = Task.Run(() =>
 			{
-				machine.WaitForStateAsync(transit.OriginState).Wait();
-				if(task.Status == TaskStatus.Created) task.Start();
-				task.Wait();
-			});
+				machine.WaitForStateAsync(transit.OriginState, token).Wait();
+				if (token.IsCancellationRequested) return;
 
-			currentTask.ContinueWith(s => { if (currentTask.IsCompletedSuccessfully) ReadyToTransit = true; transited = true; });
+				if(task.Status == TaskStatus.Created) task.Start();
+
+				task.Wait();
+
+				if(task.IsCompletedSuccessfully)
+				{
+					ReadyToTransit = true;
+					transited = true;
+				}
+			}, token);
 		}
 	}
 

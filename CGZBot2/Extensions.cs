@@ -99,5 +99,19 @@ namespace CGZBot2
 				else throw;
 			}
 		}
+
+		public static Task<T> StartAndWait<T>(this Task<T> obj)
+		{
+			obj.Start();
+			obj.Wait();
+			return obj;
+		}
+		
+		public static Task StartAndWait(this Task obj)
+		{
+			obj.Start();
+			obj.Wait();
+			return obj;
+		}
 	}
 }

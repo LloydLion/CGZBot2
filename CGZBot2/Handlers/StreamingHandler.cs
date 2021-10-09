@@ -60,49 +60,105 @@ namespace CGZBot2.Handlers
 
 		[Command("announce")]
 		[Description("Аннонсирует стрим")]
-		public Task Announce(CommandContext ctx,
-			[Description("Название стрима")] string streamName,
-			[Description("Время провидения")] DateTime date,
-			[Description("Место провидения (В дискорд канале - &НАЗВАНИЕ или в интернете - $ССЫЛКА)")] string place)
+		public Task Announce(CommandContext ctx
+			//[Description("Название стрима")] string streamName,
+			//[Description("Время провидения")] DateTime date,
+			//[Description("Место провидения (В дискорд канале - &НАЗВАНИЕ или в интернете - $ССЫЛКА)")] string place)
+			)
 		{
-			AnnouncedStream.StreamingPlaceType placeType;
+			var dialog = new MessagesDialogSource();
 
-			switch(place[0])
+			dialog.AddMessage(new DialogMessage(MessageUID.StartMessage, DialogUtils.ShowText("Введите название стрима", "msg"), DialogUtils.DeleteMessage("msg")));
+			dialog.AddMessage(new DialogMessage((MessageUID)1, DialogUtils.ShowText("Введите дату и время провидения", "msg"), DialogUtils.DeleteMessage("msg")));
+			dialog.AddMessage(new DialogMessage((MessageUID)2, DialogUtils.ShowText("Введите место провидения ($ссылка, &название Дискорд канала)", "msg"), DialogUtils.DeleteMessage("msg")));
+			dialog.AddMessage(new DialogMessage((MessageUID)3, DialogUtils.ShowText("Стрим успешно создан", "msg"), DialogUtils.DeleteMessage("msg")));
+
+			dialog.AddTransit((dctx) => new TaskTransitWorker<MessageUID>((token) =>
 			{
-				case '&':
-					placeType = AnnouncedStream.StreamingPlaceType.Discord; break;
-				case '$':
-					placeType = AnnouncedStream.StreamingPlaceType.Internet; break;
-				default:
-					ctx.RespondAsync("Неожиданный токен в 1 символе параметра place\r\nИспользуйте /help announce").TryDeleteAfter(8000);
-					return Task.CompletedTask;
-			}
-
-			if (announcedStreams[ctx].Any(s => s.Name == streamName && s.Creator == ctx.Member))
+				return new Task(() =>
+				{
+					var task = Utils.WaitForMessage(ctx.Member, ctx.Channel, token).StartAndWait();
+					if (token.IsCancellationRequested) return;
+					dctx.DynamicParameters.Add("name", task.Result.Message.Content);
+				});
+			}, true), MessageUID.StartMessage, (MessageUID)1);
+			
+			dialog.AddTransit((dctx) => new TaskTransitWorker<MessageUID>((token) =>
 			{
-				ctx.RespondAsync("Стрим с таким названием и от вас уже был аннонсирован").TryDeleteAfter(8000);
-				return Task.CompletedTask;
-			}
+				return new Task(() =>
+				{
+				retry:
+					var task = Utils.WaitForMessage(ctx.Member, ctx.Channel, token).StartAndWait();
+					if (token.IsCancellationRequested) return;
 
-			if (announcedStreams[ctx].Count(s => s.Creator == ctx.Member) >= 2)
+					if (DateTime.TryParse(task.Result.Message.Content, out var val))
+					{
+						dctx.DynamicParameters.Add("start", val);
+						return;
+					}
+					else
+					{
+						dctx.Channel.SendMessageAsync("Попробуйте ещё раз").TryDeleteAfter(8000);
+						goto retry;
+					}
+				});
+			}, true), (MessageUID)1, (MessageUID)2);
+			
+			dialog.AddTransit((dctx) => new TaskTransitWorker<MessageUID>((token) =>
 			{
-				ctx.RespondAsync("Вы превысили лимит. Нельзя аннонсировать больше 2 стримов").TryDeleteAfter(8000);
-				return Task.CompletedTask;
-			}
+				return new Task(() =>
+				{
+				retry:
+					var task = Utils.WaitForMessage(ctx.Member, ctx.Channel, token).StartAndWait();
+					if (token.IsCancellationRequested) return;
 
-			var stream = new AnnouncedStream(streamName, ctx.Member, date, place[1..], placeType);
+					var content = task.Result.Message.Content;
 
-			lock (stream.SyncRoot)
+					AnnouncedStream.StreamingPlaceType placeType;
+					switch (content[0])
+					{
+						case '&': placeType = AnnouncedStream.StreamingPlaceType.Discord; break;
+						case '$': placeType = AnnouncedStream.StreamingPlaceType.Internet; break;
+						default: dctx.Channel.SendMessageAsync("Попробуйте ещё раз").TryDeleteAfter(8000); goto retry;
+					}
+
+					dctx.DynamicParameters.Add("placeType", placeType);
+					dctx.DynamicParameters.Add("place", content[1..]);
+				});
+			}, true), (MessageUID)2, (MessageUID)3);
+
+			dialog.AddTransit((dctx) => new TaskTransitWorker<MessageUID>((token) => new Task(() => Thread.Sleep(8000)), true), (MessageUID)3, MessageUID.EndDialog);
+
+			ITransitWorker<MessageUID> factory(DialogContext dctx) => new TaskTransitWorker<MessageUID>((token) => new Task(() => { Thread.Sleep(20000); if(!token.IsCancellationRequested) dctx.DynamicParameters.Add("bad", new object()); }), true);
+			dialog.AddTransit(factory, MessageUID.StartMessage, MessageUID.EndDialog);
+			dialog.AddTransit(factory, (MessageUID)1, MessageUID.EndDialog);
+			dialog.AddTransit(factory, (MessageUID)2, MessageUID.EndDialog);
+
+			dialog.OnMessageChangedTo((dctx) =>
 			{
-				InitStream(stream);
+				var streamName = (string)dctx.DynamicParameters["name"];
+				var date = (DateTime)dctx.DynamicParameters["start"];
+				var place = (string)dctx.DynamicParameters["place"];
+				var placeType = (AnnouncedStream.StreamingPlaceType)dctx.DynamicParameters["placeType"];
 
-				StreamCreated?.Invoke(stream);
+				var stream = new AnnouncedStream(streamName, ctx.Member, date, place, placeType);
 
-				announcedStreams[ctx].Add(stream);
-				UpdateReport(stream);
+				lock (stream.SyncRoot)
+				{
+					InitStream(stream);
 
-				stream.Run();
-			}
+					StreamCreated?.Invoke(stream);
+
+					announcedStreams[ctx].Add(stream);
+					UpdateReport(stream);
+
+					stream.Run();
+				}
+			}, (MessageUID)3);
+
+			dialog.OnMessageChangedTo((dctx) => { if (dctx.DynamicParameters.ContainsKey("bad")) dctx.Channel.SendMessageAsync("Диалог прерван").TryDeleteAfter(8000); }, MessageUID.EndDialog);
+
+			var actual = dialog.Start(ctx.Channel, ctx.Member);
 
 			return Task.CompletedTask;
 		}
@@ -302,14 +358,14 @@ namespace CGZBot2.Handlers
 			stream.StreamerWaitWorker = new TaskTransitWorker<AnnouncedStream.StreamState>(waitButton("start"), true);
 			stream.StreamEndWorker = new TaskTransitWorker<AnnouncedStream.StreamState>(waitButton("stop"), true);
 
-			Func<Task> waitButton(string btnid)
+			Func<CancellationToken, Task> waitButton(string btnid)
 			{
-				return () =>
+				return (token) =>
 				{
 					return new Task(() =>
 					{
 					restart:
-						var args = Utils.WaitForButton(() => stream.ReportMessage, btnid).Result;
+						var args = Utils.WaitForButton(() => stream.ReportMessage, btnid).StartAndWait().Result;
 
 						var builder = new DiscordInteractionResponseBuilder().AsEphemeral(true);
 
@@ -339,24 +395,6 @@ namespace CGZBot2.Handlers
 		private bool StartWaitPredicate(AnnouncedStream stream)
 		{
 			return stream.StartDate < DateTime.Now;
-		}
-
-		private bool StreamerWaitPredicate(AnnouncedStream stream)
-		{
-			lock (stream.SyncRoot)
-			{
-				return stream.ReportMessage.GetReactionsAsync(DiscordEmoji.FromName(Program.Client, ":arrow_forward:"))
-					.Result.Where(s => s == stream.Creator).Any();
-			}
-		}
-
-		private bool StreamEndPredicate(AnnouncedStream stream)
-		{
-			lock (stream.SyncRoot)
-			{
-				return stream.ReportMessage.GetReactionsAsync(DiscordEmoji.FromName(Program.Client, ":x:"))
-					.Result.Where(s => s == stream.Creator).Any();
-			}
 		}
 
 		private void WaitingForStreamerHandler(AnnouncedStream stream)

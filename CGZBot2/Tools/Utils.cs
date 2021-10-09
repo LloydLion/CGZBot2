@@ -13,14 +13,28 @@ namespace CGZBot2.Tools
 {
 	class Utils
 	{
-		public static Task<ComponentInteractionCreateEventArgs> WaitForButton(Func<DiscordMessage> msgGetter, string id)
+		public static Task<ComponentInteractionCreateEventArgs> WaitForButton(Func<DiscordMessage> msgGetter, string id, CancellationToken token = default)
 		{
 			ComponentInteractionCreateEventArgs args = null;
-			AsyncEventHandler<BaseDiscordClient, ComponentInteractionCreateEventArgs> lambda = (s, a) => { if (a.Message == msgGetter() && a.Id == id) args = a; return Task.CompletedTask; };
-			Program.Client.ComponentInteractionCreated += lambda;
-			return Task.Run(() => { while (args == null) Thread.Sleep(100); Program.Client.ComponentInteractionCreated -= lambda; return args; });
+			return new Task<ComponentInteractionCreateEventArgs>(() => { Program.Client.ComponentInteractionCreated += lambda; while (args == null && !token.IsCancellationRequested)
+				Thread.Sleep(100); Program.Client.ComponentInteractionCreated -= lambda; return args; });
+
+
+			Task lambda(BaseDiscordClient s, ComponentInteractionCreateEventArgs a) { if (a.Message == msgGetter() && a.Id == id) args = a; return Task.CompletedTask; }
 		}
 
-		public static Task<ComponentInteractionCreateEventArgs> WaitForButton(DiscordMessage msg, string id) => WaitForButton(() => msg, id);
+		public static Task<ComponentInteractionCreateEventArgs> WaitForButton(DiscordMessage msg, string id, CancellationToken token = default) => WaitForButton(() => msg, id, token);
+
+
+		public static Task<MessageCreateEventArgs> WaitForMessage(Func<DiscordUser> usrGetter, Func<DiscordChannel> chGetter, CancellationToken token = default)
+		{
+			MessageCreateEventArgs args = null;
+			return new Task<MessageCreateEventArgs>(() => { Program.Client.MessageCreated += lambda; while (args == null && !token.IsCancellationRequested) Thread.Sleep(100); Program.Client.MessageCreated -= lambda; return args; }, token);
+
+
+			Task lambda(BaseDiscordClient s, MessageCreateEventArgs a) { if (a.Author == usrGetter() && a.Channel == chGetter()) args = a; return Task.CompletedTask; }
+		}
+
+		public static Task<MessageCreateEventArgs> WaitForMessage(DiscordUser user, DiscordChannel channel, CancellationToken token = default) => WaitForMessage(() => user, () => channel, token);
 	}
 }
