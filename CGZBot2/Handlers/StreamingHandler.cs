@@ -6,12 +6,10 @@ using DSharpPlus.CommandsNext;
 using DSharpPlus.CommandsNext.Attributes;
 using DSharpPlus.Entities;
 using DSharpPlus.EventArgs;
-using DSharpPlus.Interactivity.Extensions;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -26,6 +24,8 @@ namespace CGZBot2.Handlers
 
 		private readonly GuildDictionary<List<AnnouncedStream>> announcedStreams =
 			HandlerState.Get(typeof(StreamingHandler), nameof(announcedStreams), () => new List<AnnouncedStream>());
+
+		private readonly UIS uis;
 
 
 		public static event Action<AnnouncedStream> StreamCreated;
@@ -55,110 +55,18 @@ namespace CGZBot2.Handlers
 					}
 				}
 			}
+
+			uis = new UIS(this);
 		}
 
 
 		[Command("announce")]
 		[Description("Аннонсирует стрим")]
-		public Task Announce(CommandContext ctx
-			//[Description("Название стрима")] string streamName,
-			//[Description("Время провидения")] DateTime date,
-			//[Description("Место провидения (В дискорд канале - &НАЗВАНИЕ или в интернете - $ССЫЛКА)")] string place)
-			)
+		public Task Announce(CommandContext ctx)
 		{
-			var dialog = new MessagesDialogSource();
-
-			dialog.AddMessage(new DialogMessage(MessageUID.StartMessage, DialogUtils.ShowText("Введите название стрима", "msg"), DialogUtils.DeleteMessage("msg")));
-			dialog.AddMessage(new DialogMessage((MessageUID)1, DialogUtils.ShowText("Введите дату и время провидения", "msg"), DialogUtils.DeleteMessage("msg")));
-			dialog.AddMessage(new DialogMessage((MessageUID)2, DialogUtils.ShowText("Введите место провидения ($ссылка, &название Дискорд канала)", "msg"), DialogUtils.DeleteMessage("msg")));
-			dialog.AddMessage(new DialogMessage((MessageUID)3, DialogUtils.ShowText("Стрим успешно создан", "msg"), DialogUtils.DeleteMessage("msg")));
-
-			dialog.AddTransit((dctx) => new TaskTransitWorker<MessageUID>((token) =>
-			{
-				return new Task(() =>
-				{
-					var task = Utils.WaitForMessage(ctx.Member, ctx.Channel, token).StartAndWait();
-					if (token.IsCancellationRequested) return;
-					dctx.DynamicParameters.Add("name", task.Result.Message.Content);
-				});
-			}, true), MessageUID.StartMessage, (MessageUID)1);
-			
-			dialog.AddTransit((dctx) => new TaskTransitWorker<MessageUID>((token) =>
-			{
-				return new Task(() =>
-				{
-				retry:
-					var task = Utils.WaitForMessage(ctx.Member, ctx.Channel, token).StartAndWait();
-					if (token.IsCancellationRequested) return;
-
-					if (DateTime.TryParse(task.Result.Message.Content, out var val))
-					{
-						dctx.DynamicParameters.Add("start", val);
-						return;
-					}
-					else
-					{
-						dctx.Channel.SendMessageAsync("Попробуйте ещё раз").TryDeleteAfter(8000);
-						goto retry;
-					}
-				});
-			}, true), (MessageUID)1, (MessageUID)2);
-			
-			dialog.AddTransit((dctx) => new TaskTransitWorker<MessageUID>((token) =>
-			{
-				return new Task(() =>
-				{
-				retry:
-					var task = Utils.WaitForMessage(ctx.Member, ctx.Channel, token).StartAndWait();
-					if (token.IsCancellationRequested) return;
-
-					var content = task.Result.Message.Content;
-
-					AnnouncedStream.StreamingPlaceType placeType;
-					switch (content[0])
-					{
-						case '&': placeType = AnnouncedStream.StreamingPlaceType.Discord; break;
-						case '$': placeType = AnnouncedStream.StreamingPlaceType.Internet; break;
-						default: dctx.Channel.SendMessageAsync("Попробуйте ещё раз").TryDeleteAfter(8000); goto retry;
-					}
-
-					dctx.DynamicParameters.Add("placeType", placeType);
-					dctx.DynamicParameters.Add("place", content[1..]);
-				});
-			}, true), (MessageUID)2, (MessageUID)3);
-
-			dialog.AddTransit((dctx) => new TaskTransitWorker<MessageUID>((token) => new Task(() => Thread.Sleep(8000)), true), (MessageUID)3, MessageUID.EndDialog);
-
-			ITransitWorker<MessageUID> factory(DialogContext dctx) => new TaskTransitWorker<MessageUID>((token) => new Task(() => { Thread.Sleep(20000); if(!token.IsCancellationRequested) dctx.DynamicParameters.Add("bad", new object()); }), true);
-			dialog.AddTransit(factory, MessageUID.StartMessage, MessageUID.EndDialog);
-			dialog.AddTransit(factory, (MessageUID)1, MessageUID.EndDialog);
-			dialog.AddTransit(factory, (MessageUID)2, MessageUID.EndDialog);
-
-			dialog.OnMessageChangedTo((dctx) =>
-			{
-				var streamName = (string)dctx.DynamicParameters["name"];
-				var date = (DateTime)dctx.DynamicParameters["start"];
-				var place = (string)dctx.DynamicParameters["place"];
-				var placeType = (AnnouncedStream.StreamingPlaceType)dctx.DynamicParameters["placeType"];
-
-				var stream = new AnnouncedStream(streamName, ctx.Member, date, place, placeType);
-
-				lock (stream.SyncRoot)
-				{
-					InitStream(stream);
-
-					StreamCreated?.Invoke(stream);
-
-					announcedStreams[ctx].Add(stream);
-					UpdateReport(stream);
-
-					stream.Run();
-				}
-			}, (MessageUID)3);
-
-			dialog.OnMessageChangedTo((dctx) => { if (dctx.DynamicParameters.ContainsKey("bad")) dctx.Channel.SendMessageAsync("Диалог прерван").TryDeleteAfter(8000); }, MessageUID.EndDialog);
-
-			var actual = dialog.Start(ctx.Channel, ctx.Member);
+			if (announcedStreams[ctx.Guild].Count(s => s.Creator == ctx.Member) >= 2) // до 5 (вывод до 5 кнопок)
+				ctx.RespondAsync("Вы уже запустили 2 стрима. Это лимит").TryDeleteAfter(8000);
+			else uis.AnnounceDialog.Start(ctx.Channel, ctx.Member);
 
 			return Task.CompletedTask;
 		}
@@ -166,80 +74,23 @@ namespace CGZBot2.Handlers
 		[HelpUseLimits(CommandUseLimit.Private)]
 		[Command("edit-stream")]
 		[Description("Изменяет параметр стрима")]
-		public async Task EditStream(CommandContext ctx,
-			[Description("Название изменяймого стрима")] string streamName,
-			[Description("Имя изменяймого параметра\r\nДопустимые значения:\r\n" +
-				"name - название, startDate - дата начала, place - место провидения")] string paramName,
-			[Description("Новое значение параметра")] string newValue)
+		public Task EditStream(CommandContext ctx)
 		{
-			var streams = announcedStreams[ctx].Where(s => s.Creator == ctx.Member && s.Name == streamName).ToArray();
+			if(!announcedStreams[ctx.Guild].Any(s => s.Creator == ctx.Member))
+				ctx.RespondAsync("Вы не запустили ни одного стрима").TryDeleteAfter(8000);
+			else uis.EditDialog.Start(ctx.Channel, ctx.Member);
 
-			if (streams.Length == 0)
-			{
-				ctx.RespondAsync("Такого стрима не существует.\r\nПоиск шёл только среди **ваших** стримов").TryDeleteAfter(8000);
-				return;
-			}
-
-			if (streams.Length > 1) throw new Exception("Ce Pi**ec");
-
-			var stream = streams.Single();
-
-			switch (paramName)
-			{
-				case "name":
-					stream.Name = newValue;
-					break;
-				case "startDate":
-					if (stream.State == AnnouncedStream.StreamState.Announced)
-						stream.StartDate = (DateTime)await ctx.CommandsNext.ConvertArgument<DateTime>(newValue, ctx);
-					else
-					{
-						ctx.RespondAsync("Невозможно изменить дату начала стрима после его старта.\r\nПересоздайте стрим с новой датой начала").TryDeleteAfter(8000);
-						return;
-					}
-					break;
-				case "place":
-					switch (newValue[0])
-					{
-						case '&':
-							stream.PlaceType = AnnouncedStream.StreamingPlaceType.Discord; break;
-						case '$':
-							stream.PlaceType = AnnouncedStream.StreamingPlaceType.Internet; break;
-						default:
-							ctx.RespondAsync("Неожиданный токен в 1 символе параметра newValue").TryDeleteAfter(8000);
-							return;
-					}
-
-					stream.Place = newValue[1..];
-					break;
-				default:
-					ctx.RespondAsync($"Параметра {paramName} не сущетвует").TryDeleteAfter(8000);
-					return;
-			}
-
-			stream.RequestReportMessageUpdate();
-			UpdateReport(stream);
+			return Task.CompletedTask;
 		}
 
 		[HelpUseLimits(CommandUseLimit.Private)]
 		[Command("cancel-stream")]
 		[Description("Отменяет стрим")]
-		public Task CancelStream(CommandContext ctx,
-			[Description("Название отменяймого стрима")] string streamName)
+		public Task CancelStream(CommandContext ctx)
 		{
-			var streams = announcedStreams[ctx].Where(s => s.Creator == ctx.Member && s.Name == streamName).ToArray();
-
-			if(streams.Length == 0)
-			{
-				ctx.RespondAsync("Такого стрима не существует.\r\nПоиск шёл только среди **ваших** стримов").TryDeleteAfter(8000);
-				return Task.CompletedTask;
-			}
-			
-			if(streams.Length > 1) throw new Exception("Ce Pi**ec");
-
-			streams.Single().Cancel();
-			announcedStreams[ctx].Remove(streams.Single());
-			ctx.RespondAsync("Стрим успешно отменён").TryDeleteAfter(8000);
+			if (!announcedStreams[ctx.Guild].Any(s => s.Creator == ctx.Member))
+				ctx.RespondAsync("Вы не запустили ни одного стрима").TryDeleteAfter(8000);
+			else uis.DeleteDialog.Start(ctx.Channel, ctx.Member);
 
 			return Task.CompletedTask;
 		}
@@ -402,7 +253,6 @@ namespace CGZBot2.Handlers
 			stream.Creator.SendDicertMessage($"Напоминание о трансляции \"{stream.Name}\", мы ждём только вас");
 
 			UpdateReport(stream);
-
 			HandlerState.Set(typeof(StreamingHandler), nameof(announcedStreams), announcedStreams);
 		}
 
@@ -435,6 +285,175 @@ namespace CGZBot2.Handlers
 			}
 
 			return Task.CompletedTask;
+		}
+
+
+		private class UIS
+		{
+			private readonly StreamingHandler owner;
+
+
+			public UIS(StreamingHandler owner)
+			{
+				this.owner = owner;
+
+				#region AnnounceDialog
+				AnnounceDialog = new MessagesDialogSource();
+
+				AnnounceDialog.AddMessage(new DialogMessage(MessageUID.StartMessage, DialogUtils.ShowText("Введите название стрима", "msg"), DialogUtils.DeleteMessage("msg")));
+				AnnounceDialog.AddMessage(new DialogMessage((MessageUID)1, DialogUtils.ShowText("Введите дату и время провидения", "msg"), DialogUtils.DeleteMessage("msg")));
+				AnnounceDialog.AddMessage(new DialogMessage((MessageUID)2, DialogUtils.ShowText("Введите место провидения ($ссылка, &название Дискорд канала)", "msg"), DialogUtils.DeleteMessage("msg")));
+				AnnounceDialog.AddMessage(new DialogMessage((MessageUID)3, DialogUtils.ShowText("Стрим успешно создан", "msg"), DialogUtils.DeleteMessage("msg")));
+
+				AnnounceDialog.AddTransit(DialogUtils.WaitForMessageTransitFactory((msg, dctx) =>
+				{
+					if (string.IsNullOrWhiteSpace(msg.Content)) return false; //Аварийный случай, у дискорда есть встройная проверка
+
+					dctx.DynamicParameters.Add("name", msg.Content);
+					return true;
+				}), MessageUID.StartMessage, (MessageUID)1);
+
+				AnnounceDialog.AddTransit(DialogUtils.WaitForMessageTransitFactory((msg, dctx) =>
+				{
+					if (DateTime.TryParse(msg.Content, out var val))
+					{
+						dctx.DynamicParameters.Add("start", val);
+						return true;
+					}
+					else dctx.Channel.SendMessageAsync("Попробуйте ещё раз").TryDeleteAfter(8000);
+					return false;
+				}), (MessageUID)1, (MessageUID)2);
+
+				AnnounceDialog.AddTransit(DialogUtils.WaitForMessageTransitFactory((msg, dctx) =>
+				{
+					AnnouncedStream.StreamingPlaceType placeType;
+					switch (msg.Content[0])
+					{
+						case '&': placeType = AnnouncedStream.StreamingPlaceType.Discord; break;
+						case '$': placeType = AnnouncedStream.StreamingPlaceType.Internet; break;
+						default: dctx.Channel.SendMessageAsync("Попробуйте ещё раз").TryDeleteAfter(8000); return false;
+					}
+
+					dctx.DynamicParameters.Add("placeType", placeType);
+					dctx.DynamicParameters.Add("place", msg.Content[1..]);
+					return true;
+				}), (MessageUID)2, (MessageUID)3);
+
+				AnnounceDialog.AddTransit((dctx) => new TaskTransitWorker<MessageUID>((token) => new Task(() => Thread.Sleep(8000)), true), (MessageUID)3, MessageUID.EndDialog);
+
+				AnnounceDialog.AddTransit(DialogUtils.TimeoutTransitFactory(), MessageUID.StartMessage, MessageUID.EndDialog);
+				AnnounceDialog.AddTransit(DialogUtils.TimeoutTransitFactory(), (MessageUID)1, MessageUID.EndDialog);
+				AnnounceDialog.AddTransit(DialogUtils.TimeoutTransitFactory(), (MessageUID)2, MessageUID.EndDialog);
+
+				AnnounceDialog.OnMessageChangedTo((dctx) =>
+				{
+					var streamName = (string)dctx.DynamicParameters["name"];
+					var date = (DateTime)dctx.DynamicParameters["start"];
+					var place = (string)dctx.DynamicParameters["place"];
+					var placeType = (AnnouncedStream.StreamingPlaceType)dctx.DynamicParameters["placeType"];
+
+					var stream = new AnnouncedStream(streamName, dctx.Caller, date, place, placeType);
+
+					lock (stream.SyncRoot)
+					{
+						owner.InitStream(stream);
+
+						StreamCreated?.Invoke(stream);
+
+						owner.announcedStreams[dctx.Caller.Guild].Add(stream);
+						owner.UpdateReport(stream);
+
+						stream.Run();
+					}
+				}, (MessageUID)3);
+
+				AnnounceDialog.OnMessageChangedTo((dctx) => { if (dctx.DynamicParameters.ContainsKey("bad")) dctx.Channel.SendMessageAsync("Диалог прерван").TryDeleteAfter(8000); }, MessageUID.EndDialog);
+				#endregion
+
+				#region EditDialog
+				EditDialog = new MessagesDialogSource();
+
+				EditDialog.AddMessage(new DialogMessage(MessageUID.StartMessage,
+					DialogUtils.ShowButtonList(() => owner.announcedStreams.SelectMany(s => s.Value).ToList(), (c, o) => o.Name, (c, o) => o.Creator == c.Caller, "Выберете стрим", "msg", "stream"), DialogUtils.DeleteMessage("msg")));
+				EditDialog.AddMessage(new DialogMessage((MessageUID)1,
+					DialogUtils.ShowButtonList(() => new string[] { "Название", "Дата и время начала", "Место провидения" }, (c, o) => o, (c, o) => true, "Выберете параметр", "msg", "param"), DialogUtils.DeleteMessage("msg")));
+				EditDialog.AddMessage(new DialogMessage((MessageUID)2, DialogUtils.ShowText("Введите новое значение параметра", "msg"), DialogUtils.DeleteMessage("msg")));
+				EditDialog.AddMessage(new DialogMessage((MessageUID)3, DialogUtils.ShowText("Стрим изменён", "msg"), DialogUtils.DeleteMessage("msg")));
+
+
+				EditDialog.AddTransit(DialogUtils.ButtonSelectorTransitFactory("stream"), MessageUID.StartMessage, (MessageUID)1);
+				EditDialog.AddTransit(DialogUtils.ButtonSelectorTransitFactory("param"), (MessageUID)1, (MessageUID)2);
+				EditDialog.AddTransit(DialogUtils.WaitForMessageTransitFactory((msg, dctx) =>
+				{
+					var stream = (AnnouncedStream)dctx.DynamicParameters["stream"];
+
+					switch ((string)dctx.DynamicParameters["param"])
+					{
+						case "Название": stream.Name = msg.Content; break;
+						case "Дата и время начала":
+							if (DateTime.TryParse(msg.Content, out var val)) { stream.StartDate = val; break; }
+							else { dctx.Channel.SendMessageAsync("Попробуйте ещё раз").TryDeleteAfter(8000); return false; }
+						case "Место провидения":
+							AnnouncedStream.StreamingPlaceType placeType;
+
+							switch (msg.Content[0])
+							{
+								case '&': placeType = AnnouncedStream.StreamingPlaceType.Discord; break;
+								case '$': placeType = AnnouncedStream.StreamingPlaceType.Internet; break;
+								default: dctx.Channel.SendMessageAsync("Попробуйте ещё раз").TryDeleteAfter(8000); return false;
+							}
+
+							stream.PlaceType = placeType;
+							stream.Place = msg.Content[1..];
+							break;
+					}
+
+					stream.RequestReportMessageUpdate();
+					owner.UpdateReport(stream);
+					HandlerState.Set(typeof(StreamingHandler), nameof(announcedStreams), owner.announcedStreams);
+
+					return true;
+				}), (MessageUID)2, (MessageUID)3);
+
+				EditDialog.AddTransit((dctx) => new TaskTransitWorker<MessageUID>(token => new Task(() => { Thread.Sleep(8000); })), (MessageUID)3, MessageUID.EndDialog);
+
+				EditDialog.AddTransit(DialogUtils.TimeoutTransitFactory(), MessageUID.StartMessage, MessageUID.EndDialog);
+				EditDialog.AddTransit(DialogUtils.TimeoutTransitFactory(), (MessageUID)1, MessageUID.EndDialog);
+				EditDialog.AddTransit(DialogUtils.TimeoutTransitFactory(), (MessageUID)2, MessageUID.EndDialog);
+
+				EditDialog.OnMessageChangedTo(dctx => { if (dctx.DynamicParameters.ContainsKey("bad")) dctx.Channel.SendMessageAsync("Диалог прерван").TryDeleteAfter(8000); }, MessageUID.EndDialog);
+				#endregion
+
+				#region DeleteDialog
+				DeleteDialog = new MessagesDialogSource();
+
+				DeleteDialog.AddMessage(new DialogMessage(MessageUID.StartMessage, DialogUtils.ShowButtonList(() => owner.announcedStreams.SelectMany(s => s.Value).ToList(),
+					(dc, o) => o.Name, (dc, o) => o.Creator == dc.Caller, "Выберете стрим", "msg", "stream"), DialogUtils.DeleteMessage("msg")));
+				DeleteDialog.AddMessage(new DialogMessage((MessageUID)1, DialogUtils.ShowText("Стрим отменён", "msg"), DialogUtils.DeleteMessage("msg")));
+
+
+				DeleteDialog.AddTransit(DialogUtils.ButtonSelectorTransitFactory("stream"), MessageUID.StartMessage, (MessageUID)1);
+				DeleteDialog.AddTransit((dctx) => new TaskTransitWorker<MessageUID>(token => new Task(() => { Thread.Sleep(8000); })), (MessageUID)1, MessageUID.EndDialog);
+
+				DeleteDialog.AddTransit(DialogUtils.TimeoutTransitFactory(), MessageUID.StartMessage, MessageUID.EndDialog);
+
+
+				DeleteDialog.OnMessageChangedTo(dctx =>
+				{
+					var stream = (AnnouncedStream)dctx.DynamicParameters["stream"];
+					owner.announcedStreams[stream.Guild].Remove(stream);
+					stream.Cancel();
+				}, (MessageUID)1);
+
+				#endregion
+			}
+
+
+			public MessagesDialogSource AnnounceDialog { get; }
+
+			public MessagesDialogSource EditDialog { get; }
+
+			public MessagesDialogSource DeleteDialog { get; }
 		}
 	}
 }

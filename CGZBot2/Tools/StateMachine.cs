@@ -115,7 +115,8 @@ namespace CGZBot2.Tools
 
 		public Task WaitForStateAsync(TState state, CancellationToken token = default)
 		{
-			return Task.Run(() => { do { lock (SyncRoot) { } Thread.Sleep(50); } while (!CurrentState.Equals(state) && !token.IsCancellationRequested); }, token);
+			return Task.Run(() =>
+			{ do { lock (SyncRoot) { } Thread.Sleep(50); lock (SyncRoot) { } } while (!CurrentState.Equals(state) && !token.IsCancellationRequested); }, token);
 		}
 
 		private void UpdateStateDirect()
