@@ -19,6 +19,6 @@ namespace CGZBot2.Entities
 
 		public string Name { get; set; }
 
-		public ICollection<DiscordMember> Members { get; } = new List<DiscordMember>();
+		public ISet<DiscordMember> Members { get; } = new HashSet<DiscordMember>();
 	}
 }

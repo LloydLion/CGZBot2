@@ -57,7 +57,7 @@ namespace CGZBot2.Handlers
 				//--------------
 
 				var cdesk = new DiscordEmbedBuilder();
-				cdescBuilders.Add(command.Name, cdesk);
+				if (cdescBuilders.TryAdd(command.Name, cdesk) == false) continue;
 
 				cdesk.WithTitle("Описание для комманды " + command.Name);
 				cdesk.WithColor(DiscordColor.Chartreuse);

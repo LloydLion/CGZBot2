@@ -34,7 +34,7 @@ namespace CGZBot2.Tools
 			{
 				while (!disposed)
 				{
-					Thread.Sleep(200);
+					Thread.Sleep(500);
 					UpdateState();
 				}
 			});

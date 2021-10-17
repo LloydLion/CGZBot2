@@ -69,7 +69,14 @@ namespace CGZBot2
 
 		public static DiscordMessage SendDicertMessage(this DiscordMember user, string content)
 		{
-			return user.CreateDmChannelAsync().Result.SendMessageAsync(s => s.WithContent(content)).Result;
+			try
+			{
+				return user.CreateDmChannelAsync().Result.SendMessageAsync(s => s.WithContent(content)).Result;
+			}
+			catch (Exception)
+			{
+				return null;
+			}
 		}
 
 		public static bool IsExist(this DiscordMessage msg)

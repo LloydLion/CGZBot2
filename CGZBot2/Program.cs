@@ -50,7 +50,11 @@ namespace CGZBot2
 
 			Client.UseCommandsNext(new CommandsNextConfiguration()
 			{
+#if DEBUG
+				StringPrefixes = new string[] { "\\" },
+#else
 				StringPrefixes = new string[] { "/" },
+#endif
 				EnableDefaultHelp = false,
 			});
 

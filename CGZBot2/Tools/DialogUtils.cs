@@ -29,7 +29,7 @@ namespace CGZBot2.Tools
 			};
 		}
 
-		public static Action<DialogContext, DialogMessage.ShowContext> ShowButtonList<T>(Func<IReadOnlyCollection<T>> objectsGetter, Func<DialogContext, T, string> selector, Func<DialogContext, T, bool> filter, string text, string msgKey, string colKey)
+		public static Action<DialogContext, DialogMessage.ShowContext> ShowButtonList<T>(Func<DialogContext, IReadOnlyCollection<T>> objectsGetter, Func<DialogContext, T, string> selector, Func<DialogContext, T, bool> filter, string text, string msgKey, string colKey)
 		{
 			return (dc, sc) =>
 			{
@@ -40,7 +40,7 @@ namespace CGZBot2.Tools
 					s.WithContent(text);
 
 					int idc = 0;
-					var col = objectsGetter();
+					var col = objectsGetter(dc);
 
 					foreach (var obj in col)
 					{
@@ -107,6 +107,40 @@ namespace CGZBot2.Tools
 			});
 		}
 
+		public static Func<DialogContext, ITransitWorker<MessageUID>> WaitForButtonTransitFactory(Func<DialogContext, DiscordMessage> msg, Predicate<DialogContext> action, string bntId)
+		{
+			return (dctx) => new TaskTransitWorker<MessageUID>((token) =>
+			{
+				return new Task(() =>
+				{
+				retry:
+					var args = Utils.WaitForButton(() => msg(dctx), bntId).StartAndWait().Result;
+					if (token.IsCancellationRequested) return;
+					if (args.User != dctx.Caller)
+					{
+						DiscordInteractionResponseBuilder builder = new DiscordInteractionResponseBuilder().WithContent("Это не ваш диалог");
+
+						try { args.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, builder).Wait(); }
+						catch (Exception ex)
+						{
+							Program.Client.Logger.Log(LogLevel.Warning, ex, "Exception while sending interaction responce");
+						}
+						goto retry;
+					}
+					else
+					{
+						try { args.Interaction.CreateResponseAsync(InteractionResponseType.Pong).Wait(); }
+						catch (Exception ex)
+						{
+							Program.Client.Logger.Log(LogLevel.Warning, ex, "Exception while sending interaction responce");
+						}
+
+						if (!action(dctx)) goto retry;
+					}
+				});
+			});
+		}
+
 		public static Func<DialogContext, ITransitWorker<MessageUID>> WaitForMessageTransitFactory(Func<DiscordMessage, DialogContext, bool> actionPredicate)
 		{
 			return (dctx) => new TaskTransitWorker<MessageUID>((token) =>
@@ -123,7 +157,7 @@ namespace CGZBot2.Tools
 
 		public static Func<DialogContext, ITransitWorker<MessageUID>> TimeoutTransitFactory(int timeout = 50000)
 		{
-			return (dctx) => new TaskTransitWorker<MessageUID>((token) => new Task(() => { Thread.Sleep(timeout); if (!token.IsCancellationRequested) dctx.DynamicParameters.Add("bad", new object()); }), true);
+			return (dctx) => new TaskTransitWorker<MessageUID>((token) => new Task(() => { Thread.Sleep(timeout); if (!token.IsCancellationRequested) dctx.DynamicParameters.Add("bad", new object()); }));
 		}
 
 

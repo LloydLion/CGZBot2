@@ -109,6 +109,7 @@ namespace CGZBot2.Handlers
 			if(rp == null)
 			{
 				ctx.RespondAsync("Для ботов и администраторов сервера подщёт репутации не производится").TryDeleteAfter(8000);
+				return Task.CompletedTask;
 			}
 
 			var builder = new DiscordEmbedBuilder();

@@ -27,8 +27,9 @@ namespace CGZBot2.Processors.Entities
 
 			builder.Root.AddString("name", mp.Name);
 
-			if (builder.AddObject(mp.Members, "members/", out var col, out var refer))
-				invoker.Prepare(mp.Members.ToList(), builder, "members/");
+			var list = mp.Members.ToList();
+			if (builder.AddObject(list, "members/", out var col, out var refer))
+				invoker.Prepare(list, builder, "members/");
 			builder.Root.AddReference("members", refer);
 
 			if (builder.AddObject(mp.Creator, "creator/", out col, out refer))

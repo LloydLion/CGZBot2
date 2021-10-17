@@ -61,6 +61,7 @@ namespace CGZBot2.Handlers
 
 
 		[Command("announce")]
+		[Aliases("astream")]
 		[Description("Аннонсирует стрим")]
 		public Task Announce(CommandContext ctx)
 		{
@@ -73,6 +74,7 @@ namespace CGZBot2.Handlers
 
 		[HelpUseLimits(CommandUseLimit.Private)]
 		[Command("edit-stream")]
+		[Aliases("estream")]
 		[Description("Изменяет параметр стрима")]
 		public Task EditStream(CommandContext ctx)
 		{
@@ -85,6 +87,7 @@ namespace CGZBot2.Handlers
 
 		[HelpUseLimits(CommandUseLimit.Private)]
 		[Command("cancel-stream")]
+		[Aliases("cstream")]
 		[Description("Отменяет стрим")]
 		public Task CancelStream(CommandContext ctx)
 		{
@@ -320,8 +323,11 @@ namespace CGZBot2.Handlers
 						dctx.DynamicParameters.Add("start", val);
 						return true;
 					}
-					else dctx.Channel.SendMessageAsync("Попробуйте ещё раз").TryDeleteAfter(8000);
-					return false;
+					else
+					{
+						dctx.Channel.SendMessageAsync("Попробуйте ещё раз").TryDeleteAfter(8000);
+						return false;
+					}
 				}), (MessageUID)1, (MessageUID)2);
 
 				AnnounceDialog.AddTransit(DialogUtils.WaitForMessageTransitFactory((msg, dctx) =>
@@ -363,6 +369,8 @@ namespace CGZBot2.Handlers
 						owner.announcedStreams[dctx.Caller.Guild].Add(stream);
 						owner.UpdateReport(stream);
 
+						HandlerState.Set(typeof(StreamingHandler), nameof(announcedStreams), owner.announcedStreams);
+
 						stream.Run();
 					}
 				}, (MessageUID)3);
@@ -374,9 +382,9 @@ namespace CGZBot2.Handlers
 				EditDialog = new MessagesDialogSource();
 
 				EditDialog.AddMessage(new DialogMessage(MessageUID.StartMessage,
-					DialogUtils.ShowButtonList(() => owner.announcedStreams.SelectMany(s => s.Value).ToList(), (c, o) => o.Name, (c, o) => o.Creator == c.Caller, "Выберете стрим", "msg", "stream"), DialogUtils.DeleteMessage("msg")));
+					DialogUtils.ShowButtonList((dctx) => owner.announcedStreams.SelectMany(s => s.Value).ToList(), (c, o) => o.Name, (c, o) => o.Creator == c.Caller, "Выберете стрим", "msg", "stream"), DialogUtils.DeleteMessage("msg")));
 				EditDialog.AddMessage(new DialogMessage((MessageUID)1,
-					DialogUtils.ShowButtonList(() => new string[] { "Название", "Дата и время начала", "Место провидения" }, (c, o) => o, (c, o) => true, "Выберете параметр", "msg", "param"), DialogUtils.DeleteMessage("msg")));
+					DialogUtils.ShowButtonList((dctx) => new string[] { "Название", "Дата и время начала", "Место провидения" }, (c, o) => o, (c, o) => true, "Выберете параметр", "msg", "param"), DialogUtils.DeleteMessage("msg")));
 				EditDialog.AddMessage(new DialogMessage((MessageUID)2, DialogUtils.ShowText("Введите новое значение параметра", "msg"), DialogUtils.DeleteMessage("msg")));
 				EditDialog.AddMessage(new DialogMessage((MessageUID)3, DialogUtils.ShowText("Стрим изменён", "msg"), DialogUtils.DeleteMessage("msg")));
 
@@ -427,7 +435,7 @@ namespace CGZBot2.Handlers
 				#region DeleteDialog
 				DeleteDialog = new MessagesDialogSource();
 
-				DeleteDialog.AddMessage(new DialogMessage(MessageUID.StartMessage, DialogUtils.ShowButtonList(() => owner.announcedStreams.SelectMany(s => s.Value).ToList(),
+				DeleteDialog.AddMessage(new DialogMessage(MessageUID.StartMessage, DialogUtils.ShowButtonList((dctx) => owner.announcedStreams.SelectMany(s => s.Value).ToList(),
 					(dc, o) => o.Name, (dc, o) => o.Creator == dc.Caller, "Выберете стрим", "msg", "stream"), DialogUtils.DeleteMessage("msg")));
 				DeleteDialog.AddMessage(new DialogMessage((MessageUID)1, DialogUtils.ShowText("Стрим отменён", "msg"), DialogUtils.DeleteMessage("msg")));
 
@@ -444,7 +452,6 @@ namespace CGZBot2.Handlers
 					owner.announcedStreams[stream.Guild].Remove(stream);
 					stream.Cancel();
 				}, (MessageUID)1);
-
 				#endregion
 			}
 

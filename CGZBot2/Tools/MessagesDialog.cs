@@ -102,7 +102,9 @@ namespace CGZBot2.Tools
 
 		public void Show(DialogContext ctx)
 		{
-			ctxs.Add(ctx, new ShowContext());
+			if (ctxs.ContainsKey(ctx)) ctxs[ctx] = new ShowContext();
+			else ctxs.Add(ctx, new ShowContext());
+
 			showAction(ctx, ctxs[ctx]);
 		}
 
