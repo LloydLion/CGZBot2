@@ -208,7 +208,7 @@ namespace CGZBot2.Handlers
 		public Task ListParty(CommandContext ctx,
 			[Description("Название пати")] params string[] partyName)
 		{
-			var party = GetParty(ctx, string.Join(" ", partyName));
+			var party = GetParty(ctx, string.Join(" ", partyName.JoinWords()));
 			if (party == null) return Task.CompletedTask;
 
 			var fieldVal = string.Join(", ", party.Members.Select(s => s.Mention));
@@ -216,7 +216,7 @@ namespace CGZBot2.Handlers
 			var builder = new DiscordEmbedBuilder();
 
 			builder
-				.WithTitle("Информация о пати " + partyName)
+				.WithTitle("Информация о пати " + partyName.JoinWords())
 				.WithColor(DiscordColor.IndianRed)
 				.AddField("Создатель", party.Creator.Mention)
 				.AddField("Участники", fieldVal);
@@ -1040,7 +1040,7 @@ namespace CGZBot2.Handlers
 
 
 				JoinPartyDialog.AddTransit(DialogUtils.ButtonSelectorTransitFactory("party"), MessageUID.StartMessage, (MessageUID)1);
-				CreatePartyDialog.AddTransit((dctx) => new TaskTransitWorker<MessageUID>((token) => new Task(() =>
+				JoinPartyDialog.AddTransit((dctx) => new TaskTransitWorker<MessageUID>((token) => new Task(() =>
 				{
 					var members = new List<DiscordMember>();
 
