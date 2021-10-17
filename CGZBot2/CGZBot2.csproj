@@ -4,7 +4,7 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net5.0</TargetFramework>
     <AssemblyName>CGZBot</AssemblyName>
-    <Version>2.0.0.1-beta</Version>
+    <Version>2.1.0.1-beta</Version>
     <Authors>LloydLion</Authors>
     <Company>CazyGamesZone Discord Server</Company>
     <Description>Дискорд бот для сообщества CazyGamesZone в Дискорд
@@ -16,8 +16,8 @@
     <RepositoryType>Git</RepositoryType>
     <PackageTags>discord, cgzbot</PackageTags>
     <NeutralLanguage>ru</NeutralLanguage>
-    <AssemblyVersion>2.0.0.1</AssemblyVersion>
-    <FileVersion>2.0.0.1</FileVersion>
+    <AssemblyVersion>2.1.0.1</AssemblyVersion>
+    <FileVersion>2.1.0.1</FileVersion>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
   </PropertyGroup>
 

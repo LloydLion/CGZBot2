@@ -120,5 +120,10 @@ namespace CGZBot2
 			obj.Wait();
 			return obj;
 		}
+
+		public static string JoinWords(this string[] array)
+		{
+			return string.Join(" ", array);
+		}
 	}
 }

@@ -31,6 +31,8 @@ namespace CGZBot2.Handlers
 			var data = new Dictionary<string, StringBuilder>();
 			foreach (var command in cn.RegisteredCommands.Values)
 			{
+				if (cdescBuilders.ContainsKey(command.Name)) continue;
+
 				var caterogy = (command.Module.ModuleType.GetCustomAttributes(false)
 					.SingleOrDefault(s => typeof(DescriptionAttribute) == s.GetType()) as DescriptionAttribute)?.Description ?? "Нет группы";
 
@@ -57,20 +59,19 @@ namespace CGZBot2.Handlers
 				//--------------
 
 				var cdesk = new DiscordEmbedBuilder();
-				if (cdescBuilders.TryAdd(command.Name, cdesk) == false) continue;
+				cdescBuilders.Add(command.Name, cdesk);
 
 				cdesk.WithTitle("Описание для комманды " + command.Name);
 				cdesk.WithColor(DiscordColor.Chartreuse);
 				cdesk.WithDescription(command.Description);
+
+				if(command.Aliases.Count != 0)
+					cdesk.AddField("Псевдонимы", string.Join(" ", command.Aliases.Select(s => $"`{s}`")));
+
 				if(command.Overloads.Count == 1)
 					cdesk.AddField("Использование", createUsageString(command, command.Overloads[0]) + "\r\n" + createArgumenetsString(command, command.Overloads[0]));
-				else
-				{
-					foreach (var overload in command.Overloads)
-					{
-						cdesk.AddField("Вариант использования", createUsageString(command, overload) + "\r\n" + createArgumenetsString(command, overload));
-					}
-				}
+				else foreach (var overload in command.Overloads)
+					cdesk.AddField("Вариант использования", createUsageString(command, overload) + "\r\n" + createArgumenetsString(command, overload));
 
 
 				static string createUsageString(Command command, CommandOverload overload)
@@ -96,10 +97,10 @@ namespace CGZBot2.Handlers
 		}
 
 		[Command("help")]
-		public Task Help(CommandContext ctx, string cname)
+		public Task Help(CommandContext ctx, params string[] cname)
 		{
-			if (cdescBuilders.ContainsKey(cname) == false) ctx.RespondAsync("Такой комманды нет").TryDeleteAfter(8000);
-			else ctx.RespondAsync(cdescBuilders[cname]).TryDeleteAfter(20000);
+			if (cname.Length > 1 || cdescBuilders.ContainsKey(cname[0]) == false) ctx.RespondAsync("Такой комманды нет").TryDeleteAfter(8000);
+			else ctx.RespondAsync(cdescBuilders[cname[0]]).TryDeleteAfter(20000);
 			return Task.CompletedTask;
 		}
 	}

@@ -30,6 +30,8 @@ namespace CGZBot2.Handlers
 
 		public VoiceHandler()
 		{
+			Program.Client.MessageDeleted += OnMessageDeleted;
+
 			foreach (var d in createdVoices)
 			{
 				UpdateReports(d.Key);
@@ -43,12 +45,12 @@ namespace CGZBot2.Handlers
 		}
 
 
-		[Command("create")]
+		[Command("voice")]
 		[Description("Создает голосовой канал.\r\n\t" +
 			"Вы будете администратором своего канала\r\n\t" +
 			"Он будет авто-удалён после выхода всех участников")]
 		public async Task CreateVoice(CommandContext ctx,
-			[Description("Имя создаваемого канала")] string name)
+			[Description("Имя создаваемого канала")] params string[] name)
 		{
 			DiscordChannel category = voiceCreationCategory[ctx];
 
@@ -62,7 +64,7 @@ namespace CGZBot2.Handlers
 			var overs = new DiscordOverwriteBuilder[] { new DiscordOverwriteBuilder(ctx.Member).Allow(Permissions.All) };
 
 			var channel = new CreatedVoiceChannel(creator: ctx.Member, channel:
-				await ctx.Guild.CreateChannelAsync(name, ChannelType.Voice, category, overwrites: overs));
+				await ctx.Guild.CreateChannelAsync(name.JoinWords(), ChannelType.Voice, category, overwrites: overs));
 
 			ChannelCreated?.Invoke(channel);
 

@@ -52,7 +52,7 @@ namespace CGZBot2.Handlers
 		public Task Mute(CommandContext ctx,
 			[Description("Участник")] DiscordMember member,
 			[Description("Срок мута")] TimeSpan time,
-			[Description("Прачина мута")] string reason = "")
+			[Description("Прачина мута")] params string[] reason)
 		{
 			if (!ctx.Member.PermissionsIn(ctx.Channel).HasPermission(Permissions.KickMembers))
 			{
@@ -67,7 +67,7 @@ namespace CGZBot2.Handlers
 				return Task.CompletedTask;
 			}
 
-			mutes[ctx].Add(MuteMember(member, time, reason));
+			mutes[ctx].Add(MuteMember(member, time, reason.JoinWords()));
 			UpdateReports(ctx.Guild);
 
 			ctx.RespondAsync("Пользователь замьючен").TryDeleteAfter(8000);
@@ -80,7 +80,7 @@ namespace CGZBot2.Handlers
 		//[Description("Мьютит участника")]
 		public Task Mute(CommandContext ctx,
 			[Description("Участник")] DiscordMember member,
-			[Description("Прачина мута")] string reason = "")
+			[Description("Прачина мута")] params string[] reason)
 		{
 			if (!ctx.Member.PermissionsIn(ctx.Channel).HasPermission(Permissions.KickMembers))
 			{
@@ -95,7 +95,7 @@ namespace CGZBot2.Handlers
 				return Task.CompletedTask;
 			}
 
-			mutes[ctx].Add(MuteMember(member, null, reason));
+			mutes[ctx].Add(MuteMember(member, null, reason.JoinWords()));
 			UpdateReports(ctx.Guild);
 
 			ctx.RespondAsync("Пользователь замьючен").TryDeleteAfter(8000);

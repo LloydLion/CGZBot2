@@ -46,13 +46,14 @@ namespace CGZBot2.Handlers
 
 
 		[Command("discuss")]
+		[Aliases("dis")]
 		[Description("Создаёт дисскусию в этой категории")]
 		public Task CreateDiscussion(CommandContext ctx,
-			[Description("Тема")] string name)
+			[Description("Тема")] params string[] name)
 		{
 			if (CheckDiscussionCategory(ctx.Channel, ctx)) return Task.CompletedTask;
 
-			var dchannel = ctx.Guild.CreateChannelAsync(name, ChannelType.Text, ctx.Channel.Parent).Result;
+			var dchannel = ctx.Guild.CreateChannelAsync(string.Join(" ", name), ChannelType.Text, ctx.Channel.Parent).Result;
 			var channel = new DiscussionChannel(dchannel);
 			channels[ctx].Add(channel);
 

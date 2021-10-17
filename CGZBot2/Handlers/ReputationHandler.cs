@@ -99,6 +99,7 @@ namespace CGZBot2.Handlers
 
 
 		[Command("reputation")]
+		[Aliases("rp")]
 		[Description("Показывает репутацию участника")]
 		public Task PrintReputaion(CommandContext ctx,
 			[Description("Участник (по умолчанию - вы)")] DiscordMember member = null)
