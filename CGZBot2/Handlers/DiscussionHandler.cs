@@ -24,7 +24,7 @@ namespace CGZBot2.Handlers
 			BotSettings.Load<List<DiscordChannel>>(typeof(DiscussionHandler), nameof(categories));
 
 		private readonly GuildDictionary<List<DiscussionChannel>> channels =
-			HandlerState.Get(typeof(DiscussionHandler), nameof(channels), () => new List<DiscussionChannel>());
+			HandlerState.Get(typeof(DiscussionHandler), nameof(channels), (guild) => new List<DiscussionChannel>());
 
 
 		public static event Action<DiscussionChannel, DiscordMember> DiscussionCreated;

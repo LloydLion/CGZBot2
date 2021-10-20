@@ -15,7 +15,7 @@ namespace CGZBot2.Processors.Other
 
 		public bool CanProcess(Type type)
 		{
-			return typeof(IList).IsAssignableFrom(type);
+			return typeof(IList).IsAssignableFrom(type) || type.GetInterfaces().Any(x => x.IsGenericType && x.GetGenericTypeDefinition() == typeof(IList<>));
 		}
 
 		public void Prepare(object origin, ObjectsDataSetBuilder builder, ISerializator invoker, string rootId = "")

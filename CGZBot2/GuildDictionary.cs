@@ -8,7 +8,7 @@ namespace CGZBot2
 {
 	class GuildDictionary<T> : Dictionary<DiscordGuild, T>, IGuildDictionary
 	{
-		public Func<T> DefaultValueFactory { get; init; } = () => default;
+		public Func<DiscordGuild, T> DefaultValueFactory { get; init; } = (guild) => default;
 
 
 		public T this[CommandContext ctx]
@@ -19,7 +19,7 @@ namespace CGZBot2
 
 		public new T this[DiscordGuild guild]
 		{
-			get { if (!ContainsKey(guild)) Add(guild, DefaultValueFactory()); return base[guild]; }
+			get { if (!ContainsKey(guild)) Add(guild, DefaultValueFactory(guild)); return base[guild]; }
 			set { if (!ContainsKey(guild)) Add(guild, value); else base[guild] = value; }
 		}
 	}

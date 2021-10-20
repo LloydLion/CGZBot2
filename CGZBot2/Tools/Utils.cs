@@ -36,5 +36,21 @@ namespace CGZBot2.Tools
 		}
 
 		public static Task<MessageCreateEventArgs> WaitForMessage(DiscordUser user, DiscordChannel channel, CancellationToken token = default) => WaitForMessage(() => user, () => channel, token);
+
+
+		public static Task WaitFor(Func<bool> predicate)
+		{
+			return new Task(() => { while (predicate() == false) Thread.Sleep(1000); });
+		}
+
+		public static Task WaitForAny(params Func<bool>[] predicates)
+		{
+			return new Task(() => { while (predicates.Any(s => s.Invoke()) == false) Thread.Sleep(1000); });
+		}
+
+		public static Task WaitForAll(params Func<bool>[] predicates)
+		{
+			return new Task(() => { while (predicates.All(s => s.Invoke()) == false) Thread.Sleep(1000); });
+		}
 	}
 }

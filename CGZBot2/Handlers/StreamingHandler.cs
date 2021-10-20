@@ -23,7 +23,7 @@ namespace CGZBot2.Handlers
 
 
 		private readonly GuildDictionary<List<AnnouncedStream>> announcedStreams =
-			HandlerState.Get(typeof(StreamingHandler), nameof(announcedStreams), () => new List<AnnouncedStream>());
+			HandlerState.Get(typeof(StreamingHandler), nameof(announcedStreams), (guild) => new List<AnnouncedStream>());
 
 		private readonly UIS uis;
 

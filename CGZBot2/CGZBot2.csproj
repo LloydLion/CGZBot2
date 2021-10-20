@@ -4,7 +4,7 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net5.0</TargetFramework>
     <AssemblyName>CGZBot</AssemblyName>
-    <Version>2.1.0.1-beta</Version>
+    <Version>2.1.0.1-alpha</Version>
     <Authors>LloydLion</Authors>
     <Company>CazyGamesZone Discord Server</Company>
     <Description>Дискорд бот для сообщества CazyGamesZone в Дискорд

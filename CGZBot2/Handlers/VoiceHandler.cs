@@ -22,7 +22,7 @@ namespace CGZBot2.Handlers
 
 
 		private readonly GuildDictionary<List<CreatedVoiceChannel>> createdVoices =
-			HandlerState.Get(typeof(VoiceHandler), nameof(createdVoices), () => new List<CreatedVoiceChannel>());
+			HandlerState.Get(typeof(VoiceHandler), nameof(createdVoices), (guild) => new List<CreatedVoiceChannel>());
 
 
 		public static event Action<CreatedVoiceChannel> ChannelCreated;

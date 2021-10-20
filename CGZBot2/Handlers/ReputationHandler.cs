@@ -19,7 +19,7 @@ namespace CGZBot2.Handlers
 			BotSettings.Load<List<ReputationRole>>(typeof(ReputationHandler), nameof(rpRoles));
 
 		private readonly GuildDictionary<List<MemberReputation>> reputation =
-			HandlerState.Get(typeof(ReputationHandler), nameof(reputation), () => new List<MemberReputation>());
+			HandlerState.Get(typeof(ReputationHandler), nameof(reputation), (guild) => new List<MemberReputation>());
 
 		private static readonly Dictionary<ActionType, int> rpGive = new()
 		{

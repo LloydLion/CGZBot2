@@ -27,10 +27,10 @@ namespace CGZBot2.Handlers
 
 
 		private readonly GuildDictionary<List<TeamGame>> startedGames =
-			HandlerState.Get(typeof(GameHandler), nameof(startedGames), () => new List<TeamGame>());
+			HandlerState.Get(typeof(GameHandler), nameof(startedGames), (guild) => new List<TeamGame>());
 
 		private readonly GuildDictionary<List<MembersParty>> parties =
-			HandlerState.Get(typeof(GameHandler), nameof(parties), () => new List<MembersParty>());
+			HandlerState.Get(typeof(GameHandler), nameof(parties), (guild) => new List<MembersParty>());
 
 		private readonly UIS uis;
 

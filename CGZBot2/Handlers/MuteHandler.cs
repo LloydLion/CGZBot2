@@ -23,7 +23,7 @@ namespace CGZBot2.Handlers
 			BotSettings.Load<DisRole>(typeof(MuteHandler), nameof(mutedRole));
 
 		private GuildDictionary<List<MemberMuteStatus>> mutes =
-			HandlerState.Get(typeof(MuteHandler), nameof(mutes), () => new List<MemberMuteStatus>());
+			HandlerState.Get(typeof(MuteHandler), nameof(mutes), (guild) => new List<MemberMuteStatus>());
 
 
 		public static event Action<MemberMuteStatus> MemberMuted;

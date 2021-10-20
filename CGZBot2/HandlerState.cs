@@ -1,4 +1,5 @@
-﻿using LloydLion.Serialization.Common;
+﻿using DSharpPlus.Entities;
+using LloydLion.Serialization.Common;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -16,7 +17,7 @@ namespace CGZBot2
 		private readonly static object sync = new object();
 
 
-		public static GuildDictionary<T> Get<T>(Type handler, string key, Func<T> defaultValueFactory)
+		public static GuildDictionary<T> Get<T>(Type handler, string key, Func<DiscordGuild, T> defaultValueFactory)
 		{
 			lock (sync)
 			{
@@ -48,7 +49,7 @@ namespace CGZBot2
 
 				if (File.Exists(path)) File.Delete(path);
 
-				var file = File.OpenWrite(path);
+				using var file = File.OpenWrite(path);
 
 				var ser = SerializatorProvider.DefaultSerializator;
 
