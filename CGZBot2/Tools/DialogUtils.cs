@@ -118,7 +118,7 @@ namespace CGZBot2.Tools
 					if (token.IsCancellationRequested) return;
 					if (args.User != dctx.Caller)
 					{
-						DiscordInteractionResponseBuilder builder = new DiscordInteractionResponseBuilder().WithContent("Это не ваш диалог");
+						DiscordInteractionResponseBuilder builder = new DiscordInteractionResponseBuilder().WithContent("Это не ваш диалог").AsEphemeral(true);
 
 						try { args.Interaction.CreateResponseAsync(InteractionResponseType.ChannelMessageWithSource, builder).Wait(); }
 						catch (Exception ex)

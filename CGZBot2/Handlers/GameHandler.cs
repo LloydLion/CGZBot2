@@ -241,7 +241,7 @@ namespace CGZBot2.Handlers
 			}
 			else
 			{				
-				party.Creator.SendDicertMessage($"Запрос на присоединение к пати {party.Name} на сервере {party.Creator.Guild.Name} от {ctx.Member.Mention}\r\n/join-party \"{party.Name}\" {ctx.Member.Mention}");
+				party.Creator.SendDicertMessage($"Запрос на присоединение к пати {party.Name} на сервере {party.Creator.Guild.Name} от {ctx.Member.Mention}");
 
 				ctx.RespondAsync("Запрос отправлен").TryDeleteAfter(8000);
 			}
@@ -251,13 +251,45 @@ namespace CGZBot2.Handlers
 
 		[HelpUseLimits(CommandUseLimit.Private)]
 		[Command("kick-party")]
-		[Aliases("kickp")]
+		[Aliases("kparty")]
 		[Description("Кикает участника из пати (только владелец)")]
-		public Task KickPartyMember(CommandContext ctx)
+		public Task KickPartyMember(CommandContext ctx,
+			[Description("Участник")] DiscordMember member,
+			[Description("Название пати")] params string[] partyName)
 		{
-			if (!parties[ctx].Any(s => s.Creator == ctx.Member))
-				ctx.RespondAsync("Вы не создали ни одного пати");
-			else uis.KickPartyDialog.Start(ctx.Channel, ctx.Member);
+			MembersParty party;
+			if (ctx.Member.Permissions.HasPermission(Permissions.ManageChannels))
+				party = GetParty(ctx, partyName.JoinWords());
+			else
+			{
+				var partiesSel = parties[ctx].Where(s => ctx.Member == s.Creator && s.Name == partyName.JoinWords()).ToArray();
+
+				if (partiesSel.Length == 0)
+				{
+					ctx.RespondAsync("Такого пати не существует.\r\nПоиск шёл только среди **ваших** пати").TryDeleteAfter(8000);
+					return Task.CompletedTask;
+				}
+
+				if (partiesSel.Length > 1) throw new Exception("Ce Pi**ec");
+				party = partiesSel.Single();
+			}
+
+			if (party == null) return Task.CompletedTask;
+
+			if (party.Creator == member)
+			{
+				ctx.RespondAsync("Вы не можете выгнать себя т.к. вы создатель пати").TryDeleteAfter(8000);
+				return Task.CompletedTask;
+			}
+
+			if (party.Members.Remove(member))
+			{
+				ctx.RespondAsync("Участник успешно кикнут").TryDeleteAfter(8000);
+			}
+			else
+			{
+				ctx.RespondAsync("Участника нет в этом пати").TryDeleteAfter(8000);
+			}
 
 			return Task.CompletedTask;
 		}
@@ -380,20 +412,6 @@ namespace CGZBot2.Handlers
 			if (partiesSel.Length == 0)
 			{
 				ctx.RespondAsync("Такого пати не существует.\r\nПоиск шёл среди **всех** пати на сервере").TryDeleteAfter(8000);
-				return null;
-			}
-
-			if (partiesSel.Length > 1) throw new Exception("Ce Pi**ec");
-			return partiesSel.Single();
-		}
-
-		private MembersParty GetPartyPrivate(CommandContext ctx, string partyName)
-		{
-			var partiesSel = parties[ctx].Where(s => ctx.Member == s.Creator && s.Name == partyName).ToArray();
-
-			if (partiesSel.Length == 0)
-			{
-				ctx.RespondAsync("Такого пати не существует.\r\nПоиск шёл только среди **ваших** пати").TryDeleteAfter(8000);
 				return null;
 			}
 
@@ -995,6 +1013,7 @@ namespace CGZBot2.Handlers
 				ManageGameInvsDialog.OnMessageChangedTo(dctx => { if (dctx.DynamicParameters.ContainsKey("bad")) dctx.Channel.SendMessageAsync("Диалог прерван").TryDeleteAfter(8000); }, MessageUID.EndDialog);
 				#endregion
 
+				//TODO: Починить и использовать в kick-party
 				#region KickPartyDialog
 				KickPartyDialog = new MessagesDialogSource();
 
@@ -1072,7 +1091,7 @@ namespace CGZBot2.Handlers
 					party.Members.AddRange(members);
 
 					HandlerState.Set(typeof(GameHandler), nameof(parties), owner.parties);
-				}, (MessageUID)3);
+				}, (MessageUID)2);
 				JoinPartyDialog.OnMessageChangedTo(dctx => { if (dctx.DynamicParameters.ContainsKey("bad")) dctx.Channel.SendMessageAsync("Диалог прерван").TryDeleteAfter(8000); }, MessageUID.EndDialog);
 				#endregion
 			}
